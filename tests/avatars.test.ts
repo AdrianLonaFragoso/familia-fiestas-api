@@ -22,7 +22,7 @@ describe("Avatares de invitados", () => {
     expect(guestUpdateSchema.safeParse({ avatar }).success).toBe(true);
   });
 
-  it.each(["avatar-0", "avatar-7", "", "/avatar-1.png", "https://example.com/avatar.png"])(
+  it.each(["avatar-0", "avatar-26", "", "/avatar-1.png", "https://example.com/avatar.png"])(
     "rechaza un avatar fuera de la galería: %s",
     (avatar) => {
       expect(registrationSchema.safeParse({ ...registration, avatar }).success).toBe(false);

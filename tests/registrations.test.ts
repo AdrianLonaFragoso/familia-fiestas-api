@@ -48,7 +48,7 @@ describe("Inscripciones públicas", () => {
       event_id: eventId,
       full_name: "María López",
       email: "maria@example.com",
-      avatar: "avatar-9",
+      avatar: "avatar-26",
     });
 
     expect(response.status).toBe(422);

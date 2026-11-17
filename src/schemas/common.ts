@@ -15,7 +15,7 @@ export const mediumText = z.string().max(2000);
 
 export const rsvpStatusSchema = z.enum(["pending", "confirmed", "declined"]);
 
-/** Avatares disponibles en el frontend (`src/assets/avatar-*.png`). */
+/** IDs del catálogo visual del frontend (originales y packs, 1 a 25). */
 export const AVATAR_IDS = [
   "avatar-1",
   "avatar-2",
@@ -23,6 +23,25 @@ export const AVATAR_IDS = [
   "avatar-4",
   "avatar-5",
   "avatar-6",
+  "avatar-7",
+  "avatar-8",
+  "avatar-9",
+  "avatar-10",
+  "avatar-11",
+  "avatar-12",
+  "avatar-13",
+  "avatar-14",
+  "avatar-15",
+  "avatar-16",
+  "avatar-17",
+  "avatar-18",
+  "avatar-19",
+  "avatar-20",
+  "avatar-21",
+  "avatar-22",
+  "avatar-23",
+  "avatar-24",
+  "avatar-25",
 ] as const;
 export const avatarSchema = z.enum(AVATAR_IDS).nullable().optional();
 
