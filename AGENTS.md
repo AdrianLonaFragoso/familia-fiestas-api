@@ -22,7 +22,7 @@
 
 - `pnpm dev` — servidor con recarga (`tsx watch`) en `http://localhost:3000`.
 - `pnpm start` — servidor sin recarga.
-- `pnpm build` — solo typecheck (`tsc --noEmit`); no emite JS. El runtime usa `tsx`.
+- `pnpm build` — genera el cliente Prisma y ejecuta typecheck (`tsc --noEmit`); no emite JS de la API. El runtime usa `tsx`.
 - `pnpm test` / `pnpm test:watch` — Vitest.
 - `pnpm db:generate`, `db:push`, `db:migrate`, `db:deploy`, `db:seed`, `db:studio`.
 - La API debe estar corriendo para que el frontend (`../familia-fiestas-2026`) cargue datos.

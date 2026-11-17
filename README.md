@@ -161,7 +161,7 @@ tests/                 # Vitest + Supertest
 | --- | --- |
 | `pnpm dev` | Servidor con recarga (`tsx watch`). |
 | `pnpm start` | Servidor sin recarga. |
-| `pnpm build` | Chequeo de tipos (`tsc --noEmit`). |
+| `pnpm build` | Genera el cliente Prisma y comprueba tipos (`tsc --noEmit`), incluso con caché de dependencias. |
 | `pnpm test` | Vitest. |
 | `pnpm test:watch` | Vitest en modo watch. |
 | `pnpm db:generate` | Genera el cliente Prisma. |
