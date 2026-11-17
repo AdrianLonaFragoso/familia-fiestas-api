@@ -3,6 +3,7 @@ import { z } from "zod";
 import { avatarSchema, uuidSchema } from "./common.js";
 
 export const registrationSchema = z.object({
+  is_child: z.boolean().optional(),
   event_id: uuidSchema,
   full_name: z
     .string()
@@ -14,7 +15,10 @@ export const registrationSchema = z.object({
     .trim()
     .toLowerCase()
     .email("Escribe un correo válido.")
-    .max(160, "El correo no puede superar 160 caracteres."),
+    .max(160, "El correo no puede superar 160 caracteres.")
+    .or(z.literal(""))
+    .nullable()
+    .optional(),
   avatar: avatarSchema,
   participates_in_exchange: z.boolean().default(false),
   gift_suggestions: z
@@ -23,6 +27,10 @@ export const registrationSchema = z.object({
     .max(500, "Los regalos sugeridos no pueden superar 500 caracteres.")
     .nullable()
     .optional(),
+}).superRefine((values, ctx) => {
+  if (!values.is_child && !values.email) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["email"], message: "El correo es obligatorio para adultos." });
+  }
 });
 
 export const registrationsQuerySchema = z.object({

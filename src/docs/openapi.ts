@@ -190,18 +190,20 @@ export const openApiDocument = {
         tags: ["Público"],
         summary: "Inscribir a una persona en una celebración",
         description:
-          "Crea o reutiliza el invitado por correo y registra su asistencia al evento. El correo solo puede inscribirse una vez por celebración. Navidad admite intercambio de regalos; Año Nuevo no.",
+          "Crea o reutiliza el invitado y confirma su asistencia (status=confirmed, registered_at y responded_at al inscribirse); no requiere RSVP posterior. Adultos requieren correo único por evento. Con is_child=true se permite omitir email o enviarlo null/vacío: se identifica por nombre completo sin correo; homónimos o perfiles sin etiqueta de niño se resuelven en administración. El intercambio depende de la configuración del evento.",
         requestBody: {
           required: true,
           content: {
             "application/json": {
               schema: {
                 type: "object",
-                required: ["event_id", "full_name", "email"],
+                required: ["event_id", "full_name"],
+                anyOf: [{ required: ["is_child"], properties: { is_child: { enum: [true] } } }, { required: ["email"], properties: { email: { type: "string", format: "email", minLength: 1 } } }],
                 properties: {
                   event_id: { type: "string", format: "uuid" },
                   full_name: { type: "string", minLength: 2, maxLength: 120 },
-                  email: { type: "string", format: "email", maxLength: 160 },
+                  email: { anyOf: [{ type: "string", format: "email", maxLength: 160 }, { type: "string", nullable: true, enum: ["", null] }], description: "Obligatorio para adultos; opcional para niños con is_child=true." },
+                  is_child: { type: "boolean", default: false, description: "Permite registrar a un niño o niña sin correo." },
                   avatar: {
                     type: "string",
                     nullable: true,

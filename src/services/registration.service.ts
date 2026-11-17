@@ -11,6 +11,8 @@ const DUPLICATE_MESSAGE = "Ese correo ya está inscrito en esta celebración.";
  * Inscribe a una persona en una celebración.
  *
  * - Reutiliza el invitado si el correo ya existe.
+ * - Niños sin correo: identifica por nombre completo bajo bloqueo transaccional;
+ *   solo reutiliza perfiles identificados como niños y deriva homónimos al panel.
  * - Si no existe, intenta vincularlo con un invitado sembrado del mismo nombre
  *   que todavía no tiene correo, para no duplicar familias.
  * - Si no hay coincidencia, crea el invitado en la familia "Por clasificar".
@@ -44,22 +46,40 @@ export async function registerForEvent(input: RegistrationInput): Promise<Regist
     });
   }
 
-  const email = normalizeEmail(input.email);
+  const email = input.email ? normalizeEmail(input.email) : null;
+  if (!email && !input.is_child) throw unprocessable("El correo es obligatorio para adultos.");
+  const duplicateMessage = email ? DUPLICATE_MESSAGE : "Este niño o niña ya está inscrito en esta celebración.";
   const fullName = input.full_name.trim();
 
   try {
     return await prisma.$transaction(async (tx) => {
-      const existingGuest = await tx.guest.findUnique({ where: { email } });
+      let existingGuest = email ? await tx.guest.findUnique({ where: { email } }) : null;
+      if (!email) {
+        // Serializa inscripciones sin correo del mismo nombre, incluso entre eventos.
+        const identity = `registration-child:${fullName.toLocaleLowerCase("es")}`;
+        await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${identity}, 0))::text`;
+        const matches = await tx.guest.findMany({
+          where: { email: null, fullName: { equals: fullName, mode: "insensitive" } },
+          take: 2,
+        });
+        if (matches.length > 1) {
+          throw conflict("Hay varias personas sin correo con ese nombre. Pide a un organizador que complete la inscripción desde el panel.");
+        }
+        existingGuest = matches[0] ?? null;
+        if (existingGuest && !["niño", "niña", "niño/a"].includes(existingGuest.tag?.trim().toLocaleLowerCase("es") ?? "")) {
+          throw conflict("Ya existe una persona sin correo con ese nombre. Pide a un organizador que confirme su inscripción desde el panel.");
+        }
+      }
       let guest = existingGuest;
 
       if (!guest) {
-        const matchingName = await tx.guest.findFirst({
+        const matchingName = email ? await tx.guest.findFirst({
           where: {
             email: null,
             fullName: { equals: fullName, mode: "insensitive" },
           },
           select: { id: true },
-        });
+        }) : null;
 
         guest = matchingName
           ? await tx.guest.update({
@@ -74,6 +94,7 @@ export async function registerForEvent(input: RegistrationInput): Promise<Regist
                 fullName,
                 email,
                 avatar: input.avatar ?? null,
+                ...(input.is_child ? { tag: "Niño/a" } : {}),
                 family: {
                   connectOrCreate: {
                     where: { name: "Por clasificar" },
@@ -89,7 +110,7 @@ export async function registerForEvent(input: RegistrationInput): Promise<Regist
       });
 
       if (existing?.registeredAt) {
-        throw conflict(DUPLICATE_MESSAGE);
+        throw conflict(duplicateMessage);
       }
 
       // El avatar pertenece a la persona y se comparte entre sus celebraciones.
@@ -101,10 +122,13 @@ export async function registerForEvent(input: RegistrationInput): Promise<Regist
         });
       }
 
+      const registeredAt = new Date();
       const registrationData = {
+        status: "confirmed" as const,
+        respondedAt: registeredAt,
         participatesInExchange: participates,
         giftSuggestions,
-        registeredAt: new Date(),
+        registeredAt,
       };
 
       const saved = existing
@@ -116,7 +140,6 @@ export async function registerForEvent(input: RegistrationInput): Promise<Regist
             data: {
               eventId: event.id,
               guestId: guest.id,
-              status: "pending",
               ...registrationData,
             },
           });
@@ -139,7 +162,7 @@ export async function registerForEvent(input: RegistrationInput): Promise<Regist
   } catch (error) {
     if (error instanceof HttpError) throw error;
     if ((error as { code?: string }).code === "P2002") {
-      throw conflict(DUPLICATE_MESSAGE);
+      throw conflict(duplicateMessage);
     }
     throw error;
   }

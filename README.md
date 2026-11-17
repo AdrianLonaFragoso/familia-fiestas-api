@@ -72,7 +72,9 @@ El directorio público **no** expone notas privadas, datos dietéticos ni tokens
 | --- | --- | --- |
 | `POST` | `/registrations` | `{ "event_id": "...", "full_name": "...", "email": "...", "avatar": "avatar-1", "participates_in_exchange": false, "gift_suggestions": null }` |
 
-Busca o crea el invitado por correo y registra su asistencia (`pending`) en una transacción. Un correo puede inscribirse una vez por celebración; el duplicado responde `409`. Límite: 10 solicitudes por 10 minutos por IP.
+Busca o crea el invitado por correo y registra su asistencia confirmada (`confirmed`) en una transacción. La inscripción es la confirmación: guarda `registered_at` y `responded_at` con el mismo instante, incluso al reutilizar una asistencia creada previamente por administración; no requiere confirmar después. Un correo puede inscribirse una vez por celebración; el duplicado responde `409`. Límite: 10 solicitudes por 10 minutos por IP.
+
+Para niños, enviar `is_child: true` permite omitir `email` o enviarlo `null`/vacío; para adultos sigue siendo obligatorio. Sin correo, la API busca por nombre completo (sin distinguir mayúsculas) entre perfiles sin correo y serializa esas inscripciones con un bloqueo transaccional. Los perfiles nuevos se etiquetan `Niño/a`; se reutilizan perfiles con etiqueta `Niño`, `Niña` o `Niño/a`. Si hay homónimos o el único perfil existente no está identificado como niño, responde `409` y deriva la inscripción al panel para no unir personas incorrectas. Un niño puede inscribirse en varios eventos; el reintento en el mismo evento responde `409` sin modificar avatar ni regalos. No requiere migración: `Guest.email` ya admite `null`.
 
 `avatar` es opcional y pertenece al invitado, no al evento: admite `avatar-1` … `avatar-6` o `null` (sin avatar). Se acepta también en `POST/PATCH /admin/guests`. Al reutilizar un invitado, omitirlo conserva el anterior; enviarlo actualiza su avatar para todas sus celebraciones y `null` lo quita. Un ID ajeno a la galería responde `422`. El avatar viaja como ID en las respuestas de invitados, participantes e inscripciones; las imágenes las sirve el frontend.
 
