@@ -72,7 +72,7 @@ async function main() {
     await prisma.event.upsert({
       where: { slug },
       update: { name, eventDate: date },
-      create: { slug, name, eventDate: date },
+      create: { slug, name, eventDate: date, giftExchangeEnabled: slug === "navidad" },
     });
   }
 

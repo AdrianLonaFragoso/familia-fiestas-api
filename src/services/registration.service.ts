@@ -21,11 +21,11 @@ export async function registerForEvent(input: RegistrationInput): Promise<Regist
   const prisma = getPrisma();
   const event = await prisma.event.findUnique({
     where: { id: input.event_id },
-    select: { id: true, slug: true, name: true, eventDate: true },
+    select: { id: true, slug: true, name: true, eventDate: true, giftExchangeEnabled: true },
   });
   if (!event) throw notFound("Celebración no encontrada.");
 
-  const giftExchange = hasGiftExchange(event.slug);
+  const giftExchange = hasGiftExchange(event);
   if (input.participates_in_exchange && !giftExchange) {
     throw unprocessable("Esta celebración no tiene intercambio de regalos.");
   }
@@ -171,7 +171,7 @@ export async function listRegistrations(filters: {
     },
     include: {
       guest: { include: { family: { select: { name: true } } } },
-      event: { select: { id: true, slug: true, name: true, eventDate: true } },
+      event: { select: { id: true, slug: true, name: true, eventDate: true, giftExchangeEnabled: true } },
     },
     orderBy: { registeredAt: "desc" },
   });

@@ -3,11 +3,9 @@
  * servicios y los serializadores compartan la misma fuente de verdad.
  */
 
-/** Celebraciones que tienen intercambio de regalos. */
-export const GIFT_EXCHANGE_EVENT_SLUGS = ["navidad"] as const;
-
-export function hasGiftExchange(slug: string): boolean {
-  return (GIFT_EXCHANGE_EVENT_SLUGS as readonly string[]).includes(slug);
+/** La configuración persistida es autoritativa; el fallback admite registros previos. */
+export function hasGiftExchange(event: { slug: string; giftExchangeEnabled?: boolean }): boolean {
+  return event.giftExchangeEnabled ?? event.slug === "navidad";
 }
 
 /** Normaliza un correo para compararlo y guardarlo: sin espacios y en minúsculas. */

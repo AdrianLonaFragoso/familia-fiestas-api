@@ -64,6 +64,7 @@ export type EventRecord = {
   id: string;
   slug: string;
   name: string;
+  giftExchangeEnabled?: boolean;
   eventDate: DateLike;
   arrivalTime: DateLike | null;
   startTime: DateLike | null;
@@ -115,7 +116,7 @@ export function mapEvent(event: EventRecord, venue: VenueRecord | null): EventRo
     observations: event.observations,
     venue_id: event.venueId,
     updated_at: isoRequired(event.updatedAt),
-    gift_exchange_enabled: hasGiftExchange(event.slug),
+    gift_exchange_enabled: hasGiftExchange(event),
     display: {
       date_long: formatDateLong(eventDate),
       date_short: formatDateShort(eventDate),

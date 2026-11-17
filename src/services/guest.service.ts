@@ -230,12 +230,12 @@ export async function updateEventGuest(id: string, input: EventGuestUpdateInput)
       guestId: true,
       participatesInExchange: true,
       giftSuggestions: true,
-      event: { select: { slug: true } },
+      event: { select: { slug: true, giftExchangeEnabled: true } },
     },
   });
   if (!current) throw notFound("Registro de asistencia no encontrado.");
 
-  if (input.participates_in_exchange === true && !hasGiftExchange(current.event.slug)) {
+  if (input.participates_in_exchange === true && !hasGiftExchange(current.event)) {
     throw unprocessable("Esta celebración no tiene intercambio de regalos.");
   }
 

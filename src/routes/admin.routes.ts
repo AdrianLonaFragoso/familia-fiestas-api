@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { ANN_CATEGORIES, ANN_PRIORITY, RSVP_LABEL } from "../lib/labels.js";
 import { z } from "zod";
 
 import { parseQuery, validateBody } from "../middleware/validate.js";
@@ -44,6 +45,7 @@ import {
 } from "../services/announcement-admin.service.js";
 import {
   createEvent,
+  setEventGuests,
   deleteEvent,
   listEvents,
   updateEvent,
@@ -110,6 +112,14 @@ export const adminRouter = Router();
 
 adminRouter.use(requireAdmin);
 
+adminRouter.get("/options", (_req, res) => {
+  res.json({
+    announcement_categories: ANN_CATEGORIES.map(([value, label]) => ({ value, label })),
+    announcement_priorities: ANN_PRIORITY.map(([value, label]) => ({ value, label })),
+    rsvp_statuses: Object.entries(RSVP_LABEL).map(([value, label]) => ({ value, label })),
+  });
+});
+
 // Celebración
 adminRouter.get("/events", async (_req, res) => {
   res.json(await listEvents());
@@ -123,6 +133,10 @@ adminRouter.patch("/events/:id", validateBody(eventUpdateSchema), async (req, re
 adminRouter.delete("/events/:id", async (req, res) => {
   await deleteEvent(String(req.params.id));
   res.status(204).send();
+});
+
+adminRouter.put("/events/:id/guests", validateBody(assigneesSchema), async (req, res) => {
+  res.json(await setEventGuests(String(req.params.id), req.body.guest_ids));
 });
 
 // Sedes

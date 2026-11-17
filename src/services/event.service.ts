@@ -178,6 +178,7 @@ export async function createEvent(input: EventCreateInput) {
     data: {
       slug: input.slug,
       name: input.name,
+      giftExchangeEnabled: input.gift_exchange_enabled ?? false,
       eventDate: parseDateOnly(input.event_date),
       arrivalTime: optionalTime(input.arrival_time) ?? null,
       startTime: optionalTime(input.start_time) ?? null,
@@ -202,6 +203,8 @@ export async function updateEvent(id: string, input: EventUpdateInput) {
     data: {
       ...(input.slug !== undefined ? { slug: input.slug } : {}),
       ...(input.name !== undefined ? { name: input.name } : {}),
+      ...(input.gift_exchange_enabled !== undefined
+        ? { giftExchangeEnabled: input.gift_exchange_enabled } : {}),
       ...(input.event_date !== undefined
         ? { eventDate: parseDateOnly(input.event_date) }
         : {}),
@@ -247,4 +250,21 @@ async function listAnnouncements() {
   return sortAnnouncements(
     rows.map((announcement) => mapAnnouncement(announcement, announcement.event)),
   );
+}
+
+/** Reemplaza solo la lista de este evento; conserva RSVP y datos de miembros existentes. */
+export async function setEventGuests(id: string, guestIds: string[]) {
+  const ids = [...new Set(guestIds)];
+  return getPrisma().$transaction(async (tx) => {
+    if (!await tx.event.findUnique({ where: { id }, select: { id: true } })) {
+      throw notFound("Celebración no encontrada.");
+    }
+    const count = await tx.guest.count({ where: { id: { in: ids } } });
+    if (count !== ids.length) throw unprocessable("Uno o más invitados ya no existen.");
+    await tx.eventGuest.deleteMany({ where: { eventId: id, guestId: { notIn: ids } } });
+    await tx.eventGuest.createMany({
+      data: ids.map((guestId) => ({ eventId: id, guestId })), skipDuplicates: true,
+    });
+    return { ok: true, event_id: id, guests_count: ids.length };
+  });
 }

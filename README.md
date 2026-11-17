@@ -187,3 +187,13 @@ Las pruebas cubren estado del servicio, OpenAPI, autenticación de administraci�
 4. Ajusta `CORS_ORIGINS` al dominio real del frontend.
 
 `/api/docs` queda público. Si no quieres exponerlo en producción, monta `swaggerUi` condicionado por `NODE_ENV`.
+
+## Configuración de eventos
+
+Los eventos aceptan `gift_exchange_enabled` (boolean; `false` al crear). Este campo controla el registro y la edición de participantes en cualquier evento, independientemente del slug. Desactivarlo conserva las participaciones y regalos existentes; el sorteo sigue pendiente.
+
+`PUT /api/v1/admin/events/:id/guests` con `{ "guest_ids": ["<uuid>"] }` reemplaza la lista de un evento en una transacción. Conserva el estado de asistentes que permanecen y no modifica otras celebraciones. Los retirados pierden la asistencia/inscripción y datos de intercambio de ese evento; el perfil del invitado se conserva. Requiere `X-Admin-Key`.
+
+Para bases existentes sin historial de migraciones, aplicar una vez (se puede reejecutar) `pnpm exec prisma db execute --file prisma/patches/20261117_event_exchange.sql` y ejecutar `pnpm db:generate`. El parche añade la columna e inicializa Navidad con intercambio habilitado sin ejecutar el seed. En bases nuevas, `db:push` crea el campo y el seed inicializa Navidad al crearla.
+
+`GET /api/v1/admin/options` entrega las categorías/prioridades de avisos y estados RSVP con sus etiquetas, para que los formularios no dupliquen las reglas de la API.

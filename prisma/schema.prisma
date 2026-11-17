@@ -77,18 +77,19 @@ model Venue {
 }
 
 model Event {
-  id           String    @id @default(uuid()) @db.Uuid
-  slug         String    @unique
-  name         String
-  eventDate    DateTime  @map("event_date") @db.Date
-  arrivalTime  DateTime? @map("arrival_time") @db.Time(6)
-  startTime    DateTime? @map("start_time") @db.Time(6)
-  dinnerTime   DateTime? @map("dinner_time") @db.Time(6)
-  endTime      DateTime? @map("end_time") @db.Time(6)
-  description  String?
-  observations String?
-  venueId      String?   @map("venue_id") @db.Uuid
-  updatedAt    DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  id                  String    @id @default(uuid()) @db.Uuid
+  slug                String    @unique
+  name                String
+  eventDate           DateTime  @map("event_date") @db.Date
+  arrivalTime         DateTime? @map("arrival_time") @db.Time(6)
+  startTime           DateTime? @map("start_time") @db.Time(6)
+  dinnerTime          DateTime? @map("dinner_time") @db.Time(6)
+  endTime             DateTime? @map("end_time") @db.Time(6)
+  description         String?
+  giftExchangeEnabled Boolean   @default(false) @map("gift_exchange_enabled")
+  observations        String?
+  venueId             String?   @map("venue_id") @db.Uuid
+  updatedAt           DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   venue            Venue?           @relation(fields: [venueId], references: [id], onDelete: SetNull)
   guests           EventGuest[]

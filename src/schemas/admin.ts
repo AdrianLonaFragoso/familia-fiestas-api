@@ -23,8 +23,9 @@ const optionalTime = timeSchema.nullable().optional();
 const sortOrder = z.coerce.number().int().min(0).optional();
 
 export const eventCreateSchema = z.object({
-  slug: z.string().trim().min(1).max(80),
-  name: shortText,
+  slug: z.string().trim().min(1).max(80).regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, "Usa minúsculas, números y guiones."),
+  name: shortText.trim().min(1),
+  gift_exchange_enabled: z.boolean().optional(),
   event_date: dateSchema,
   arrival_time: optionalTime,
   start_time: optionalTime,
@@ -93,7 +94,7 @@ export const eventGuestUpdateSchema = z.object({
 
 export const hostCreateSchema = z.object({
   guest_id: optionalUuid,
-  name: shortText,
+  name: shortText.trim().min(1),
   welcome_message: nullableText,
   photo_path: z.string().max(500).nullable().optional(),
   venue_notes: nullableText,
@@ -128,7 +129,7 @@ export const responsibilityCreateSchema = z.object({
 export const responsibilityUpdateSchema = responsibilityCreateSchema.partial();
 
 export const activityCreateSchema = z.object({
-  name: shortText,
+  name: shortText.trim().min(1),
   description: nullableText,
   start_time: optionalTime,
   end_time: optionalTime,

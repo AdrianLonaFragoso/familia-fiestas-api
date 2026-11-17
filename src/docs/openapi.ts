@@ -45,7 +45,7 @@ export const openApiDocument = {
     description:
       "API de la Cena de Navidad 2026 y la Cena de Año Nuevo 2027. Toda la lógica de datos y negocio vive aquí.",
   },
-  servers: [{ url: "http://localhost:3000/api/v1", description: "Desarrollo" }],
+  servers: [{ url: "/api/v1", description: "Servidor actual" }],
   tags: [
     { name: "Público" },
     { name: "Invitaciones" },
@@ -318,6 +318,12 @@ export const openApiDocument = {
         },
       },
     },
+    "/admin/options": {
+      get: { tags: ["Administración"], security: adminSecurity,
+        summary: "Opciones y etiquetas para los formularios administrativos",
+        responses: { "200": okJson("Categorías, prioridades y estados RSVP"), "401": errorResponse },
+      },
+    },
     "/admin/events": {
       get: {
         tags: ["Administración"],
@@ -329,6 +335,7 @@ export const openApiDocument = {
         tags: ["Administración"],
         security: adminSecurity,
         summary: "Crear celebración",
+        description: "Acepta slug (minúsculas, números y guiones), name, event_date, horarios, descripción, venue_id y gift_exchange_enabled (boolean, false por defecto).",
         requestBody: { required: true, content: { "application/json": { schema: { type: "object" } } } },
         responses: { "201": okJson("Celebración creada"), "401": errorResponse, "422": errorResponse },
       },
@@ -338,6 +345,7 @@ export const openApiDocument = {
         tags: ["Administración"],
         security: adminSecurity,
         summary: "Editar celebración",
+        description: "Actualización parcial; gift_exchange_enabled activa o desactiva el intercambio sin borrar participaciones ni sugerencias. El sorteo no está implementado.",
         parameters: [idParam],
         requestBody: { required: true, content: { "application/json": { schema: { type: "object" } } } },
         responses: { "200": okJson("Celebración actualizada"), "401": errorResponse, "404": errorResponse },
@@ -348,6 +356,19 @@ export const openApiDocument = {
         summary: "Eliminar celebración",
         parameters: [idParam],
         responses: { "204": { description: "Eliminada" }, "401": errorResponse, "404": errorResponse },
+      },
+    },
+    "/admin/events/{id}/guests": {
+      put: {
+        tags: ["Administración"], security: adminSecurity,
+        summary: "Reemplazar invitados de un evento", parameters: [idParam],
+        description: "Operación atómica. Conserva RSVP e intercambio de miembros que permanecen. Elimina asistencias/inscripciones de quienes se retiran, sin borrar perfiles ni tocar otros eventos.",
+        requestBody: { required: true, content: { "application/json": { schema: {
+          type: "object", required: ["guest_ids"], properties: {
+            guest_ids: { type: "array", maxItems: 200, items: { type: "string", format: "uuid" } },
+          },
+        } } } },
+        responses: { "200": okJson("Invitados actualizados"), "401": errorResponse, "404": errorResponse, "422": errorResponse },
       },
     },
     "/admin/venues": {
