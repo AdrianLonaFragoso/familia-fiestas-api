@@ -1,0 +1,240 @@
+// Schema de la base de datos (Neon Postgres) usada por la app.
+// Las columnas status/category usan String con CHECK en la base de datos, igual
+// que antes; los valores válidos viven en src/lib/format.ts.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Family {
+  id           String   @id @default(uuid()) @db.Uuid
+  name         String   @unique @db.VarChar(80)
+  sortOrder    Int      @default(0) @map("sort_order")
+  isUnassigned Boolean  @default(false) @map("is_unassigned")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  guests Guest[]
+
+  @@map("families")
+}
+
+model Guest {
+  id        String   @id @default(uuid()) @db.Uuid
+  fullName  String   @map("full_name") @db.VarChar(120)
+  email     String?  @unique @db.VarChar(160)
+  avatar    String?  @db.VarChar(20)
+  familyId  String?  @map("family_id") @db.Uuid
+  tag       String?  @db.VarChar(40)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  family           Family?                @relation(fields: [familyId], references: [id], onDelete: SetNull)
+  private          GuestPrivate?
+  eventGuests      EventGuest[]
+  eventHosts       EventHost[]
+  menuAssignments  MenuItemAssignee[]
+  respAssignments  ResponsibilityAssignee[]
+  invitationTokens InvitationToken[]
+
+  @@index([familyId])
+  @@map("guests")
+}
+
+/// Datos sensibles del invitado: nunca se exponen en consultas públicas.
+model GuestPrivate {
+  guestId      String   @id @map("guest_id") @db.Uuid
+  dietaryNotes String?  @map("dietary_notes")
+  adminNotes   String?  @map("admin_notes")
+  updatedAt    DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  guest Guest @relation(fields: [guestId], references: [id], onDelete: Cascade)
+
+  @@map("guest_private")
+}
+
+model Venue {
+  id             String   @id @default(uuid()) @db.Uuid
+  name           String?
+  address        String?
+  referencesText String?  @map("references_text")
+  accessNotes    String?  @map("access_notes")
+  parking        String?
+  photoPath      String?  @map("photo_path")
+  observations   String?
+  latitude       Float?
+  longitude      Float?
+  updatedAt      DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  events Event[]
+
+  @@map("venues")
+}
+
+model Event {
+  id           String    @id @default(uuid()) @db.Uuid
+  slug         String    @unique
+  name         String
+  eventDate    DateTime  @map("event_date") @db.Date
+  arrivalTime  DateTime? @map("arrival_time") @db.Time(6)
+  startTime    DateTime? @map("start_time") @db.Time(6)
+  dinnerTime   DateTime? @map("dinner_time") @db.Time(6)
+  endTime      DateTime? @map("end_time") @db.Time(6)
+  description  String?
+  observations String?
+  venueId      String?   @map("venue_id") @db.Uuid
+  updatedAt    DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  venue            Venue?           @relation(fields: [venueId], references: [id], onDelete: SetNull)
+  guests           EventGuest[]
+  hosts            EventHost[]
+  menuItems        MenuItem[]
+  responsibilities Responsibility[]
+  activities       Activity[]
+  announcements    Announcement[]
+
+  @@map("events")
+}
+
+model EventGuest {
+  id                     String    @id @default(uuid()) @db.Uuid
+  eventId                String    @map("event_id") @db.Uuid
+  guestId                String    @map("guest_id") @db.Uuid
+  status                 String    @default("pending") @db.VarChar(20)
+  publicNote             String?   @map("public_note") @db.VarChar(200)
+  participatesInExchange Boolean   @default(false) @map("participates_in_exchange")
+  giftSuggestions        String?   @map("gift_suggestions") @db.VarChar(500)
+  registeredAt           DateTime? @map("registered_at") @db.Timestamptz(6)
+  respondedAt            DateTime? @map("responded_at") @db.Timestamptz(6)
+
+  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  guest Guest @relation(fields: [guestId], references: [id], onDelete: Cascade)
+
+  @@unique([eventId, guestId])
+  @@index([guestId])
+  @@map("event_guests")
+}
+
+model EventHost {
+  id             String  @id @default(uuid()) @db.Uuid
+  eventId        String  @map("event_id") @db.Uuid
+  guestId        String? @map("guest_id") @db.Uuid
+  name           String  @db.VarChar(120)
+  welcomeMessage String? @map("welcome_message")
+  photoPath      String? @map("photo_path")
+  venueNotes     String? @map("venue_notes")
+  sortOrder      Int     @default(0) @map("sort_order")
+
+  event Event  @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  guest Guest? @relation(fields: [guestId], references: [id], onDelete: SetNull)
+
+  @@index([eventId])
+  @@map("event_hosts")
+}
+
+model MenuItem {
+  id           String   @id @default(uuid()) @db.Uuid
+  eventId      String   @map("event_id") @db.Uuid
+  name         String   @db.VarChar(120)
+  category     String   @default("otros") @db.VarChar(20)
+  description  String?
+  quantity     Decimal? @db.Decimal
+  unit         String?
+  status       String   @default("por_asignar") @db.VarChar(20)
+  notes        String?
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  event     Event              @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  assignees MenuItemAssignee[]
+
+  @@index([eventId])
+  @@map("menu_items")
+}
+
+model MenuItemAssignee {
+  menuItemId String @map("menu_item_id") @db.Uuid
+  guestId    String @map("guest_id") @db.Uuid
+
+  menuItem MenuItem @relation(fields: [menuItemId], references: [id], onDelete: Cascade)
+  guest    Guest    @relation(fields: [guestId], references: [id], onDelete: Cascade)
+
+  @@id([menuItemId, guestId])
+  @@map("menu_item_assignees")
+}
+
+model Responsibility {
+  id          String   @id @default(uuid()) @db.Uuid
+  eventId     String   @map("event_id") @db.Uuid
+  title       String   @db.VarChar(120)
+  description String?
+  category    String   @default("otros") @db.VarChar(20)
+  quantity    String?
+  dueDate     DateTime? @map("due_date") @db.Date
+  status      String   @default("sin_asignar") @db.VarChar(20)
+  notes       String?
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  event     Event                    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  assignees ResponsibilityAssignee[]
+
+  @@index([eventId])
+  @@map("responsibilities")
+}
+
+model ResponsibilityAssignee {
+  responsibilityId String @map("responsibility_id") @db.Uuid
+  guestId          String @map("guest_id") @db.Uuid
+
+  responsibility Responsibility @relation(fields: [responsibilityId], references: [id], onDelete: Cascade)
+  guest          Guest          @relation(fields: [guestId], references: [id], onDelete: Cascade)
+
+  @@id([responsibilityId, guestId])
+  @@map("responsibility_assignees")
+}
+
+model Activity {
+  id           String    @id @default(uuid()) @db.Uuid
+  eventId      String    @map("event_id") @db.Uuid
+  name         String    @db.VarChar(120)
+  description  String?
+  startTime    DateTime? @map("start_time") @db.Time(6)
+  endTime      DateTime? @map("end_time") @db.Time(6)
+  responsible  String?
+  instructions String?
+  sortOrder    Int       @default(0) @map("sort_order")
+
+  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@index([eventId, sortOrder])
+  @@map("activities")
+}
+
+model Announcement {
+  id          String   @id @default(uuid()) @db.Uuid
+  eventId     String?  @map("event_id") @db.Uuid
+  title       String   @db.VarChar(140)
+  content     String   @default("")
+  category    String   @default("general") @db.VarChar(20)
+  priority    String   @default("normal") @db.VarChar(20)
+  publishedAt DateTime @default(now()) @map("published_at") @db.Timestamptz(6)
+  isActive    Boolean  @default(true) @map("is_active")
+
+  event Event? @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@map("announcements")
+}
+
+model InvitationToken {
+  id        String    @id @default(uuid()) @db.Uuid
+  guestId   String    @map("guest_id") @db.Uuid
+  token     String    @unique
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  revokedAt DateTime? @map("revoked_at") @db.Timestamptz(6)
+
+  guest Guest @relation(fields: [guestId], references: [id], onDelete: Cascade)
+
+  @@map("invitation_tokens")
+}

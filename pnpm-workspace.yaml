@@ -1,0 +1,10 @@
+# Configuración de pnpm para este proyecto.
+
+# 24h de espera antes de instalar versiones recién publicadas.
+minimumReleaseAge: 1440
+
+# Solo estos paquetes pueden ejecutar scripts de instalación.
+allowBuilds:
+  "@prisma/engines": true
+  esbuild: true
+  prisma: true
