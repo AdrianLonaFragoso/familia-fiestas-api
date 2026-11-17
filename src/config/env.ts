@@ -37,8 +37,9 @@ export function resetEnvCache(): void {
 }
 
 export function corsOrigins(): string[] {
-  return getEnv()
+  const configured = getEnv()
     .CORS_ORIGINS.split(",")
     .map((origin) => origin.trim())
     .filter(Boolean);
+  return [...new Set(["https://familia-fiestas-2026.vercel.app", ...configured])];
 }

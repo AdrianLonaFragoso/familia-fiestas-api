@@ -39,7 +39,7 @@ pnpm dev                    # http://localhost:3000
 | `DATABASE_URL` | Cadena de Neon con `-pooler` en el host. La usa la API en runtime. |
 | `DIRECT_URL` | Cadena directa, sin pooler. La usa Prisma CLI para migraciones. |
 | `ADMIN_API_KEY` | Clave que deben enviar los organizadores en `X-Admin-Key`. |
-| `CORS_ORIGINS` | Orígenes permitidos, separados por coma. En desarrollo `http://localhost:8080`. |
+| `CORS_ORIGINS` | Orígenes adicionales permitidos, separados por coma. Por defecto `http://localhost:8080`. El frontend principal `https://familia-fiestas-2026.vercel.app` está permitido explícitamente. |
 | `LOG_LEVEL` | Nivel de Pino (`info`, `debug`, `silent`…). Opcional. |
 | `RATE_LIMIT_WINDOW_MS` | Ventana del rate limit en ms. Opcional, por defecto `60000`. |
 | `RATE_LIMIT_MAX` | Peticiones por ventana. Opcional, por defecto `60`. |
