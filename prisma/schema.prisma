@@ -17,6 +17,7 @@ model Family {
   id           String   @id @default(uuid()) @db.Uuid
   name         String   @unique @db.VarChar(80)
   sortOrder    Int      @default(0) @map("sort_order")
+  createdByAccountId String? @map("created_by_account_id") @db.Uuid
   isUnassigned Boolean  @default(false) @map("is_unassigned")
   createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
 
@@ -59,6 +60,7 @@ model GuestPrivate {
 }
 
 model Venue {
+  createdByAccountId String? @map("created_by_account_id") @db.Uuid
   id             String   @id @default(uuid()) @db.Uuid
   name           String?
   address        String?
@@ -97,6 +99,7 @@ model Event {
   venueId             String?   @map("venue_id") @db.Uuid
   updatedAt           DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
+  accessAssignments AccountEvent[]
   venue            Venue?           @relation(fields: [venueId], references: [id], onDelete: SetNull)
   guests           EventGuest[]
   hosts            EventHost[]
@@ -246,4 +249,35 @@ model InvitationToken {
   guest Guest @relation(fields: [guestId], references: [id], onDelete: Cascade)
 
   @@map("invitation_tokens")
+}
+
+model AccessAccount {
+ id String @id @default(uuid()) @db.Uuid
+ name String @db.VarChar(120)
+ email String? @db.VarChar(160)
+ isActive Boolean @default(true) @map("is_active")
+ createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+ assignments AccountEvent[]
+ keys AccessKey[]
+ @@map("access_accounts")
+}
+model AccessKey {
+ id String @id @default(uuid()) @db.Uuid
+ accountId String @map("account_id") @db.Uuid
+ digest String @unique @db.VarChar(64)
+ prefix String @db.VarChar(16)
+ createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+ revokedAt DateTime? @map("revoked_at") @db.Timestamptz(6)
+ account AccessAccount @relation(fields:[accountId],references:[id],onDelete:Cascade)
+ @@index([accountId])
+ @@map("access_keys")
+}
+model AccountEvent {
+ accountId String @map("account_id") @db.Uuid
+ eventId String @map("event_id") @db.Uuid
+ account AccessAccount @relation(fields:[accountId],references:[id],onDelete:Cascade)
+ event Event @relation(fields:[eventId],references:[id],onDelete:Cascade)
+ @@id([accountId,eventId])
+ @@index([eventId])
+ @@map("account_events")
 }

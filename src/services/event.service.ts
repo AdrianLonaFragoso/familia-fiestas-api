@@ -49,7 +49,7 @@ export async function listEvents(includeUnreleased = false): Promise<EventSummar
   );
 }
 
-export async function getEventBundle(slug: string): Promise<EventBundle | null> {
+export async function getEventBundle(slug: string, includeUnreleased = false): Promise<EventBundle | null> {
   const prisma = getPrisma();
   const event = await prisma.event.findUnique({
     where: { slug },
@@ -69,7 +69,7 @@ export async function getEventBundle(slug: string): Promise<EventBundle | null> 
     },
   });
 
-  if (!event || event.isReleased === false) return null;
+  if (!event || (!includeUnreleased && event.isReleased === false)) return null;
 
   const announcements = await prisma.announcement.findMany({
     where: { isActive: true, OR: [{ eventId: event.id }, { eventId: null }] },

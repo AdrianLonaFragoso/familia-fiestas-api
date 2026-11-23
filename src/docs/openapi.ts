@@ -43,7 +43,7 @@ export const openApiDocument = {
     title: "Familia Fiestas API",
     version: "1.0.0",
     description:
-      "API de la Cena de Navidad 2026 y la Cena de Año Nuevo 2027. Toda la lógica de datos y negocio vive aquí.",
+      "API de eventos. Público: inicio reducido, registro y avisos publicados. X-Admin-Key identifica superusuario (ADMIN_API_KEY vigente) o anfitrión con eventos asignados. Solo el superusuario crea, borra y libera eventos y administra cuentas. Familias/directorio ya no son públicos; anfitriones usan /admin/families y /participants con alcance por evento. Invitaciones personales: solo superusuario.",
   },
   servers: [{ url: "/api/v1", description: "Servidor actual" }],
   tags: [
@@ -84,13 +84,96 @@ export const openApiDocument = {
           missing_reason: { type: "string", nullable: true },
           google_url: { type: "string", nullable: true },
           ics_url: { type: "string", nullable: true },
-          start_instant: { type: "string", format: "date-time", nullable: true },
+          start_instant: {
+            type: "string",
+            format: "date-time",
+            nullable: true,
+          },
           end_instant: { type: "string", format: "date-time", nullable: true },
         },
       },
     },
   },
   paths: {
+    "/admin/me": {
+      get: {
+        tags: ["Administración"],
+        security: adminSecurity,
+        summary: "Cuenta, nivel y eventos asignados de la clave actual",
+        responses: {
+          "200": okJson("Identidad sin credenciales"),
+          "401": errorResponse,
+        },
+      },
+    },
+    "/admin/accounts": {
+      get: {
+        tags: ["Administración"],
+        security: adminSecurity,
+        summary: "Lista cuentas de anfitrión (solo superusuario)",
+        responses: {
+          "200": okJson(
+            "Cuentas con event_ids y prefijos de claves; nunca hashes ni claves completas",
+          ),
+          "403": errorResponse,
+        },
+      },
+      post: {
+        tags: ["Administración"],
+        security: adminSecurity,
+        summary: "Crea anfitrión y su primera clave (solo superusuario)",
+        description:
+          "Body: name, email opcional, event_ids (UUID únicos). Devuelve account y key una sola vez. La cuenta nace activa; no se envían correos.",
+        responses: {
+          "201": okJson("Cuenta y clave recién generada"),
+          "403": errorResponse,
+        },
+      },
+    },
+    "/admin/accounts/{id}": {
+      patch: {
+        tags: ["Administración"],
+        security: adminSecurity,
+        parameters: [idParam],
+        summary:
+          "Edita cuenta, activa/desactiva o reemplaza asignaciones (solo superusuario)",
+        description:
+          "Body parcial: name, email, is_active, event_ids. Los cambios se consultan en cada petición.",
+        responses: {
+          "200": okJson("Cuenta sin clave completa"),
+          "403": errorResponse,
+        },
+      },
+    },
+    "/admin/accounts/{id}/rotate-key": {
+      post: {
+        tags: ["Administración"],
+        security: adminSecurity,
+        parameters: [idParam],
+        summary: "Revoca las claves vigentes y genera otra (solo superusuario)",
+        responses: {
+          "200": okJson("key mostrada una sola vez"),
+          "403": errorResponse,
+        },
+      },
+    },
+    "/admin/accounts/{id}/revoke-key/{keyId}": {
+      post: {
+        tags: ["Administración"],
+        security: adminSecurity,
+        parameters: [
+          idParam,
+          {
+            name: "keyId",
+            in: "path",
+            required: true,
+            schema: { type: "string", format: "uuid" },
+          },
+        ],
+        summary: "Revoca una clave de la cuenta (solo superusuario)",
+        responses: { "200": okJson("Clave revocada"), "403": errorResponse },
+      },
+    },
     "/health": {
       get: {
         tags: ["Público"],
@@ -103,7 +186,7 @@ export const openApiDocument = {
         tags: ["Público"],
         summary: "Datos agregados de la página de inicio",
         description:
-          "Incluye events liberados con contadores; upcoming_events incluye slug para identificar su imagen y contiene solo menciones de eventos no liberados cuya fecha aún no termina en America/Mexico_City. También incluye avisos ordenados, próxima celebración liberada y avisos destacados.",
+          "Público: events liberados con fecha/hora/lugar/anfitriones, sin contadores ni datos organizativos. Con clave, los contadores/datos completos se entregan solo para eventos autorizados; upcoming_events es vacío para público y restringido a asignaciones para anfitriones; incluye slug para identificar su imagen y contiene solo menciones de eventos no liberados cuya fecha aún no termina en America/Mexico_City. También incluye avisos ordenados, próxima celebración liberada y avisos destacados.",
         responses: { "200": okJson("Contenido de inicio") },
       },
     },
@@ -116,6 +199,7 @@ export const openApiDocument = {
     },
     "/events/{slug}": {
       get: {
+        security: adminSecurity,
         tags: ["Público"],
         summary: "Detalle completo de una celebración",
         parameters: [slugParam],
@@ -127,6 +211,7 @@ export const openApiDocument = {
     },
     "/events/{slug}/calendar.ics": {
       get: {
+        security: adminSecurity,
         tags: ["Público"],
         summary: "Descargar calendario ICS de una celebración",
         parameters: [slugParam],
@@ -142,10 +227,14 @@ export const openApiDocument = {
     },
     "/events/{slug}/calendar/google": {
       get: {
+        security: adminSecurity,
         tags: ["Público"],
         summary: "URL de Google Calendar de una celebración",
         parameters: [slugParam],
-        responses: { "200": okJson("Enlace de calendario"), "404": errorResponse },
+        responses: {
+          "200": okJson("Enlace de calendario"),
+          "404": errorResponse,
+        },
       },
     },
     "/announcements": {
@@ -153,19 +242,31 @@ export const openApiDocument = {
         tags: ["Público"],
         summary: "Avisos activos ordenados",
         parameters: [
-          { name: "event_id", in: "query", schema: { type: "string", format: "uuid" } },
+          {
+            name: "event_id",
+            in: "query",
+            schema: { type: "string", format: "uuid" },
+          },
           {
             name: "priority",
             in: "query",
-            schema: { type: "string", enum: ["normal", "importante", "urgente"] },
+            schema: {
+              type: "string",
+              enum: ["normal", "importante", "urgente"],
+            },
           },
-          { name: "limit", in: "query", schema: { type: "integer", minimum: 1, maximum: 100 } },
+          {
+            name: "limit",
+            in: "query",
+            schema: { type: "integer", minimum: 1, maximum: 100 },
+          },
         ],
         responses: { "200": okJson("Avisos") },
       },
     },
     "/families": {
       get: {
+        security: adminSecurity,
         tags: ["Público"],
         summary: "Familias con número de integrantes",
         responses: { "200": okJson("Familias") },
@@ -173,13 +274,22 @@ export const openApiDocument = {
     },
     "/participants": {
       get: {
+        security: adminSecurity,
         tags: ["Público"],
         summary: "Directorio público limitado de participantes",
         description:
           "Solo expone nombre, familia, etiqueta y estado por evento. No incluye notas privadas ni tokens.",
         parameters: [
-          { name: "event_id", in: "query", schema: { type: "string", format: "uuid" } },
-          { name: "family_id", in: "query", schema: { type: "string", format: "uuid" } },
+          {
+            name: "event_id",
+            in: "query",
+            schema: { type: "string", format: "uuid" },
+          },
+          {
+            name: "family_id",
+            in: "query",
+            schema: { type: "string", format: "uuid" },
+          },
           { name: "search", in: "query", schema: { type: "string" } },
         ],
         responses: { "200": okJson("Participantes") },
@@ -189,20 +299,55 @@ export const openApiDocument = {
       post: {
         tags: ["Público"],
         summary: "Registrar una persona y confirmar una o varias fechas",
-        description: "Confirma todas las fechas en una transacción y devuelve {registrations: [...]}. Si una fecha es inválida o está duplicada, no guarda ninguna. No modifica fechas no seleccionadas. Adultos requieren correo; niños admiten is_child=true sin correo. El intercambio es opcional, solo para adultos que confirmen Navidad el 24 de diciembre, y solo se guarda en esa asistencia.",
-        requestBody: { required: true, content: { "application/json": { schema: {
-          type: "object", required: ["event_ids", "full_name"],
-          properties: {
-            event_ids: { type: "array", minItems: 1, maxItems: 20, uniqueItems: true, items: { type: "string", format: "uuid" } },
-            full_name: { type: "string", minLength: 2, maxLength: 120 },
-            email: { type: "string", nullable: true, description: "Obligatorio y válido para adultos; opcional para niños." },
-            is_child: { type: "boolean", default: false },
-            avatar: { type: "string", nullable: true, enum: [...AVATAR_IDS, null] },
-            participates_in_exchange: { type: "boolean", default: false },
-            gift_suggestions: { type: "string", maxLength: 500, nullable: true, description: "Obligatorio al participar." },
+        description:
+          "Confirma todas las fechas en una transacción y devuelve {registrations: [...]}. Si una fecha es inválida o está duplicada, no guarda ninguna. No modifica fechas no seleccionadas. Adultos requieren correo; niños admiten is_child=true sin correo. El intercambio es opcional, solo para adultos que confirmen Navidad el 24 de diciembre, y solo se guarda en esa asistencia.",
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                required: ["event_ids", "full_name"],
+                properties: {
+                  event_ids: {
+                    type: "array",
+                    minItems: 1,
+                    maxItems: 20,
+                    uniqueItems: true,
+                    items: { type: "string", format: "uuid" },
+                  },
+                  full_name: { type: "string", minLength: 2, maxLength: 120 },
+                  email: {
+                    type: "string",
+                    nullable: true,
+                    description:
+                      "Obligatorio y válido para adultos; opcional para niños.",
+                  },
+                  is_child: { type: "boolean", default: false },
+                  avatar: {
+                    type: "string",
+                    nullable: true,
+                    enum: [...AVATAR_IDS, null],
+                  },
+                  participates_in_exchange: { type: "boolean", default: false },
+                  gift_suggestions: {
+                    type: "string",
+                    maxLength: 500,
+                    nullable: true,
+                    description: "Obligatorio al participar.",
+                  },
+                },
+              },
+            },
           },
-        } } } },
-        responses: { "201": okJson("Fechas confirmadas"), "404": errorResponse, "409": errorResponse, "422": errorResponse, "429": errorResponse },
+        },
+        responses: {
+          "201": okJson("Fechas confirmadas"),
+          "404": errorResponse,
+          "409": errorResponse,
+          "422": errorResponse,
+          "429": errorResponse,
+        },
       },
     },
     "/registrations": {
@@ -218,17 +363,41 @@ export const openApiDocument = {
               schema: {
                 type: "object",
                 required: ["event_id", "full_name"],
-                anyOf: [{ required: ["is_child"], properties: { is_child: { enum: [true] } } }, { required: ["email"], properties: { email: { type: "string", format: "email", minLength: 1 } } }],
+                anyOf: [
+                  {
+                    required: ["is_child"],
+                    properties: { is_child: { enum: [true] } },
+                  },
+                  {
+                    required: ["email"],
+                    properties: {
+                      email: { type: "string", format: "email", minLength: 1 },
+                    },
+                  },
+                ],
                 properties: {
                   event_id: { type: "string", format: "uuid" },
                   full_name: { type: "string", minLength: 2, maxLength: 120 },
-                  email: { anyOf: [{ type: "string", format: "email", maxLength: 160 }, { type: "string", nullable: true, enum: ["", null] }], description: "Obligatorio para adultos; opcional para niños con is_child=true." },
-                  is_child: { type: "boolean", default: false, description: "Permite registrar a un niño o niña sin correo." },
+                  email: {
+                    anyOf: [
+                      { type: "string", format: "email", maxLength: 160 },
+                      { type: "string", nullable: true, enum: ["", null] },
+                    ],
+                    description:
+                      "Obligatorio para adultos; opcional para niños con is_child=true.",
+                  },
+                  is_child: {
+                    type: "boolean",
+                    default: false,
+                    description:
+                      "Permite registrar a un niño o niña sin correo.",
+                  },
                   avatar: {
                     type: "string",
                     nullable: true,
                     enum: [...AVATAR_IDS, null],
-                    description: "Avatar elegido de la galería; null significa sin avatar.",
+                    description:
+                      "Avatar elegido de la galería; null significa sin avatar.",
                   },
                   participates_in_exchange: { type: "boolean", default: false },
                   gift_suggestions: {
@@ -254,6 +423,7 @@ export const openApiDocument = {
     },
     "/invitations/resolve": {
       post: {
+        security: adminSecurity,
         tags: ["Invitaciones"],
         summary: "Resolver enlace personal de invitación",
         requestBody: {
@@ -280,6 +450,7 @@ export const openApiDocument = {
     },
     "/invitations/rsvp": {
       patch: {
+        security: adminSecurity,
         tags: ["Invitaciones"],
         summary: "Actualizar asistencia del invitado dueño del token",
         requestBody: {
@@ -312,6 +483,7 @@ export const openApiDocument = {
     },
     "/invitations/calendar.ics": {
       post: {
+        security: adminSecurity,
         tags: ["Invitaciones"],
         summary: "Descargar ICS de una celebración para el invitado",
         requestBody: {
@@ -341,9 +513,14 @@ export const openApiDocument = {
       },
     },
     "/admin/options": {
-      get: { tags: ["Administración"], security: adminSecurity,
+      get: {
+        tags: ["Administración"],
+        security: adminSecurity,
         summary: "Opciones y etiquetas para los formularios administrativos",
-        responses: { "200": okJson("Categorías, prioridades y estados RSVP"), "401": errorResponse },
+        responses: {
+          "200": okJson("Categorías, prioridades y estados RSVP"),
+          "401": errorResponse,
+        },
       },
     },
     "/admin/events": {
@@ -357,9 +534,17 @@ export const openApiDocument = {
         tags: ["Administración"],
         security: adminSecurity,
         summary: "Crear celebración",
-        description: "Acepta is_released (false por defecto), dress_code, contributions, exchange_rules, additional_activities, registration_deadline (informativa), slug (minúsculas, números y guiones), name, event_date, horarios, descripción, venue_id y gift_exchange_enabled (boolean, false por defecto).",
-        requestBody: { required: true, content: { "application/json": { schema: { type: "object" } } } },
-        responses: { "201": okJson("Celebración creada"), "401": errorResponse, "422": errorResponse },
+        description:
+          "Solo superusuario. Acepta is_released (false por defecto), dress_code, contributions, exchange_rules, additional_activities, registration_deadline (informativa), slug (minúsculas, números y guiones), name, event_date, horarios, descripción, venue_id y gift_exchange_enabled (boolean, false por defecto).",
+        requestBody: {
+          required: true,
+          content: { "application/json": { schema: { type: "object" } } },
+        },
+        responses: {
+          "201": okJson("Celebración creada"),
+          "401": errorResponse,
+          "422": errorResponse,
+        },
       },
     },
     "/admin/events/{id}": {
@@ -367,30 +552,63 @@ export const openApiDocument = {
         tags: ["Administración"],
         security: adminSecurity,
         summary: "Editar celebración",
-        description: "Actualización parcial; is_released controla cards, menú y registro sin borrar asistencias. No liberados vigentes se mencionan en home.upcoming_events; sus páginas y calendarios públicos responden 404 y no aceptan inscripciones. gift_exchange_enabled activa o desactiva el intercambio sin borrar participaciones ni sugerencias. El sorteo no está implementado.",
+        description:
+          "Anfitrión: solo eventos asignados, sin editar slug/is_released; crear, borrar y liberar corresponde al superusuario. Actualización parcial; is_released controla cards, menú y registro sin borrar asistencias. No liberados vigentes se mencionan en home.upcoming_events; sus páginas y calendarios públicos responden 404 y no aceptan inscripciones. gift_exchange_enabled activa o desactiva el intercambio sin borrar participaciones ni sugerencias. El sorteo no está implementado.",
         parameters: [idParam],
-        requestBody: { required: true, content: { "application/json": { schema: { type: "object" } } } },
-        responses: { "200": okJson("Celebración actualizada"), "401": errorResponse, "404": errorResponse },
+        requestBody: {
+          required: true,
+          content: { "application/json": { schema: { type: "object" } } },
+        },
+        responses: {
+          "200": okJson("Celebración actualizada"),
+          "401": errorResponse,
+          "404": errorResponse,
+        },
       },
       delete: {
         tags: ["Administración"],
         security: adminSecurity,
         summary: "Eliminar celebración",
         parameters: [idParam],
-        responses: { "204": { description: "Eliminada" }, "401": errorResponse, "404": errorResponse },
+        responses: {
+          "204": { description: "Eliminada" },
+          "401": errorResponse,
+          "404": errorResponse,
+        },
       },
     },
     "/admin/events/{id}/guests": {
       put: {
-        tags: ["Administración"], security: adminSecurity,
-        summary: "Reemplazar invitados de un evento", parameters: [idParam],
-        description: "Operación atómica. Conserva RSVP e intercambio de miembros que permanecen. Elimina asistencias/inscripciones de quienes se retiran, sin borrar perfiles ni tocar otros eventos.",
-        requestBody: { required: true, content: { "application/json": { schema: {
-          type: "object", required: ["guest_ids"], properties: {
-            guest_ids: { type: "array", maxItems: 200, items: { type: "string", format: "uuid" } },
+        tags: ["Administración"],
+        security: adminSecurity,
+        summary: "Reemplazar invitados de un evento",
+        parameters: [idParam],
+        description:
+          "Operación atómica. Conserva RSVP e intercambio de miembros que permanecen. Elimina asistencias/inscripciones de quienes se retiran, sin borrar perfiles ni tocar otros eventos.",
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                required: ["guest_ids"],
+                properties: {
+                  guest_ids: {
+                    type: "array",
+                    maxItems: 200,
+                    items: { type: "string", format: "uuid" },
+                  },
+                },
+              },
+            },
           },
-        } } } },
-        responses: { "200": okJson("Invitados actualizados"), "401": errorResponse, "404": errorResponse, "422": errorResponse },
+        },
+        responses: {
+          "200": okJson("Invitados actualizados"),
+          "401": errorResponse,
+          "404": errorResponse,
+          "422": errorResponse,
+        },
       },
     },
     "/admin/venues": {
@@ -404,7 +622,10 @@ export const openApiDocument = {
         tags: ["Administración"],
         security: adminSecurity,
         summary: "Crear sede",
-        requestBody: { required: true, content: { "application/json": { schema: { type: "object" } } } },
+        requestBody: {
+          required: true,
+          content: { "application/json": { schema: { type: "object" } } },
+        },
         responses: { "201": okJson("Sede creada") },
       },
     },
@@ -414,7 +635,10 @@ export const openApiDocument = {
         security: adminSecurity,
         summary: "Editar sede",
         parameters: [idParam],
-        requestBody: { required: true, content: { "application/json": { schema: { type: "object" } } } },
+        requestBody: {
+          required: true,
+          content: { "application/json": { schema: { type: "object" } } },
+        },
         responses: { "200": okJson("Sede actualizada") },
       },
       delete: {
@@ -436,7 +660,10 @@ export const openApiDocument = {
         tags: ["Administración"],
         security: adminSecurity,
         summary: "Crear familia",
-        requestBody: { required: true, content: { "application/json": { schema: { type: "object" } } } },
+        requestBody: {
+          required: true,
+          content: { "application/json": { schema: { type: "object" } } },
+        },
         responses: { "201": okJson("Familia creada") },
       },
     },
@@ -446,7 +673,10 @@ export const openApiDocument = {
         security: adminSecurity,
         summary: "Editar familia",
         parameters: [idParam],
-        requestBody: { required: true, content: { "application/json": { schema: { type: "object" } } } },
+        requestBody: {
+          required: true,
+          content: { "application/json": { schema: { type: "object" } } },
+        },
         responses: { "200": okJson("Familia actualizada") },
       },
       delete: {
@@ -463,7 +693,11 @@ export const openApiDocument = {
         security: adminSecurity,
         summary: "Listar invitados con datos privados",
         parameters: [
-          { name: "family_id", in: "query", schema: { type: "string", format: "uuid" } },
+          {
+            name: "family_id",
+            in: "query",
+            schema: { type: "string", format: "uuid" },
+          },
           { name: "search", in: "query", schema: { type: "string" } },
         ],
         responses: { "200": okJson("Invitados") },
@@ -483,21 +717,35 @@ export const openApiDocument = {
                 required: ["full_name"],
                 properties: {
                   full_name: { type: "string", maxLength: 120 },
-                  email: { type: "string", format: "email", nullable: true, maxLength: 160 },
-                  avatar: { type: "string", nullable: true, enum: [...AVATAR_IDS, null] },
+                  email: {
+                    type: "string",
+                    format: "email",
+                    nullable: true,
+                    maxLength: 160,
+                  },
+                  avatar: {
+                    type: "string",
+                    nullable: true,
+                    enum: [...AVATAR_IDS, null],
+                  },
                   family_id: { type: "string", format: "uuid", nullable: true },
                   tag: { type: "string", nullable: true, maxLength: 40 },
                   event_ids: {
                     type: "array",
                     items: { type: "string", format: "uuid" },
-                    description: "Celebraciones a las que se inscribe al invitado.",
+                    description:
+                      "Celebraciones a las que se inscribe al invitado.",
                   },
                 },
               },
             },
           },
         },
-        responses: { "201": okJson("Invitado creado"), "409": errorResponse, "422": errorResponse },
+        responses: {
+          "201": okJson("Invitado creado"),
+          "409": errorResponse,
+          "422": errorResponse,
+        },
       },
     },
     "/admin/guests/{id}": {
@@ -523,8 +771,17 @@ export const openApiDocument = {
                 type: "object",
                 properties: {
                   full_name: { type: "string", maxLength: 120 },
-                  email: { type: "string", format: "email", nullable: true, maxLength: 160 },
-                  avatar: { type: "string", nullable: true, enum: [...AVATAR_IDS, null] },
+                  email: {
+                    type: "string",
+                    format: "email",
+                    nullable: true,
+                    maxLength: 160,
+                  },
+                  avatar: {
+                    type: "string",
+                    nullable: true,
+                    enum: [...AVATAR_IDS, null],
+                  },
                   family_id: { type: "string", format: "uuid", nullable: true },
                   tag: { type: "string", nullable: true, maxLength: 40 },
                   event_ids: {
@@ -536,7 +793,11 @@ export const openApiDocument = {
             },
           },
         },
-        responses: { "200": okJson("Invitado actualizado"), "409": errorResponse, "422": errorResponse },
+        responses: {
+          "200": okJson("Invitado actualizado"),
+          "409": errorResponse,
+          "422": errorResponse,
+        },
       },
       delete: {
         tags: ["Administración"],
@@ -552,7 +813,10 @@ export const openApiDocument = {
         security: adminSecurity,
         summary: "Guardar notas privadas del invitado",
         parameters: [idParam],
-        requestBody: { required: true, content: { "application/json": { schema: { type: "object" } } } },
+        requestBody: {
+          required: true,
+          content: { "application/json": { schema: { type: "object" } } },
+        },
         responses: { "200": okJson("Notas guardadas") },
       },
     },
@@ -562,7 +826,11 @@ export const openApiDocument = {
         security: adminSecurity,
         summary: "Listar asistencias",
         parameters: [
-          { name: "event_id", in: "query", schema: { type: "string", format: "uuid" } },
+          {
+            name: "event_id",
+            in: "query",
+            schema: { type: "string", format: "uuid" },
+          },
         ],
         responses: { "200": okJson("Asistencias") },
       },
@@ -582,17 +850,35 @@ export const openApiDocument = {
               schema: {
                 type: "object",
                 properties: {
-                  status: { type: "string", enum: ["pending", "confirmed", "declined"] },
-                  public_note: { type: "string", nullable: true, maxLength: 200 },
+                  status: {
+                    type: "string",
+                    enum: ["pending", "confirmed", "declined"],
+                  },
+                  public_note: {
+                    type: "string",
+                    nullable: true,
+                    maxLength: 200,
+                  },
                   participates_in_exchange: { type: "boolean" },
-                  gift_suggestions: { type: "string", nullable: true, maxLength: 500 },
-                  responded_at: { type: "string", format: "date-time", nullable: true },
+                  gift_suggestions: {
+                    type: "string",
+                    nullable: true,
+                    maxLength: 500,
+                  },
+                  responded_at: {
+                    type: "string",
+                    format: "date-time",
+                    nullable: true,
+                  },
                 },
               },
             },
           },
         },
-        responses: { "200": okJson("Asistencia actualizada"), "422": errorResponse },
+        responses: {
+          "200": okJson("Asistencia actualizada"),
+          "422": errorResponse,
+        },
       },
     },
     "/admin/events/{eventId}/hosts": {
@@ -608,7 +894,10 @@ export const openApiDocument = {
         security: adminSecurity,
         summary: "Crear anfitrión",
         parameters: [eventIdParam],
-        requestBody: { required: true, content: { "application/json": { schema: { type: "object" } } } },
+        requestBody: {
+          required: true,
+          content: { "application/json": { schema: { type: "object" } } },
+        },
         responses: { "201": okJson("Anfitrión creado") },
       },
     },
@@ -625,7 +914,10 @@ export const openApiDocument = {
         security: adminSecurity,
         summary: "Crear platillo",
         parameters: [eventIdParam],
-        requestBody: { required: true, content: { "application/json": { schema: { type: "object" } } } },
+        requestBody: {
+          required: true,
+          content: { "application/json": { schema: { type: "object" } } },
+        },
         responses: { "201": okJson("Platillo creado") },
       },
     },
@@ -642,7 +934,10 @@ export const openApiDocument = {
         security: adminSecurity,
         summary: "Crear responsabilidad",
         parameters: [eventIdParam],
-        requestBody: { required: true, content: { "application/json": { schema: { type: "object" } } } },
+        requestBody: {
+          required: true,
+          content: { "application/json": { schema: { type: "object" } } },
+        },
         responses: { "201": okJson("Responsabilidad creada") },
       },
     },
@@ -659,7 +954,10 @@ export const openApiDocument = {
         security: adminSecurity,
         summary: "Crear actividad",
         parameters: [eventIdParam],
-        requestBody: { required: true, content: { "application/json": { schema: { type: "object" } } } },
+        requestBody: {
+          required: true,
+          content: { "application/json": { schema: { type: "object" } } },
+        },
         responses: { "201": okJson("Actividad creada") },
       },
     },
@@ -674,7 +972,10 @@ export const openApiDocument = {
         tags: ["Administración"],
         security: adminSecurity,
         summary: "Crear aviso",
-        requestBody: { required: true, content: { "application/json": { schema: { type: "object" } } } },
+        requestBody: {
+          required: true,
+          content: { "application/json": { schema: { type: "object" } } },
+        },
         responses: { "201": okJson("Aviso creado") },
       },
     },
@@ -684,7 +985,10 @@ export const openApiDocument = {
         security: adminSecurity,
         summary: "Editar aviso",
         parameters: [idParam],
-        requestBody: { required: true, content: { "application/json": { schema: { type: "object" } } } },
+        requestBody: {
+          required: true,
+          content: { "application/json": { schema: { type: "object" } } },
+        },
         responses: { "200": okJson("Aviso actualizado") },
       },
       delete: {
@@ -701,7 +1005,11 @@ export const openApiDocument = {
         security: adminSecurity,
         summary: "Listar tokens de invitación",
         parameters: [
-          { name: "guest_id", in: "query", schema: { type: "string", format: "uuid" } },
+          {
+            name: "guest_id",
+            in: "query",
+            schema: { type: "string", format: "uuid" },
+          },
         ],
         responses: { "200": okJson("Tokens") },
       },
@@ -741,7 +1049,11 @@ export const openApiDocument = {
         description:
           "Solo incluye asistencias creadas desde el formulario público (registered_at no nulo).",
         parameters: [
-          { name: "event_id", in: "query", schema: { type: "string", format: "uuid" } },
+          {
+            name: "event_id",
+            in: "query",
+            schema: { type: "string", format: "uuid" },
+          },
           { name: "search", in: "query", schema: { type: "string" } },
         ],
         responses: { "200": okJson("Inscripciones"), "401": errorResponse },

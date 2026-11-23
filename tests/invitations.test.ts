@@ -26,6 +26,7 @@ describe("Invitaciones personales", () => {
   it("valida el formato del token", async () => {
     const response = await request(app)
       .post("/api/v1/invitations/resolve")
+      .set("X-Admin-Key", "test-admin-key")
       .send({ token: "no-es-un-token" });
 
     expect(response.status).toBe(422);
@@ -38,6 +39,7 @@ describe("Invitaciones personales", () => {
 
     const response = await request(app)
       .post("/api/v1/invitations/resolve")
+      .set("X-Admin-Key", "test-admin-key")
       .send({ token });
 
     expect(response.status).toBe(404);
@@ -53,6 +55,7 @@ describe("Invitaciones personales", () => {
 
     const response = await request(app)
       .post("/api/v1/invitations/resolve")
+      .set("X-Admin-Key", "test-admin-key")
       .send({ token });
 
     expect(response.status).toBe(200);
@@ -70,6 +73,7 @@ describe("Invitaciones personales", () => {
 
     const response = await request(app)
       .patch("/api/v1/invitations/rsvp")
+      .set("X-Admin-Key", "test-admin-key")
       .send({ token, event_id: eventId, status: "confirmed" });
 
     expect(response.status).toBe(200);
@@ -84,6 +88,7 @@ describe("Invitaciones personales", () => {
   it("rechaza estados de RSVP desconocidos", async () => {
     const response = await request(app)
       .patch("/api/v1/invitations/rsvp")
+      .set("X-Admin-Key", "test-admin-key")
       .send({ token, event_id: eventId, status: "quizas" });
 
     expect(response.status).toBe(422);

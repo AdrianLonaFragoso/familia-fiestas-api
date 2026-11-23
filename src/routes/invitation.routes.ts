@@ -1,3 +1,4 @@
+import { requireAdmin, requireSuper } from "../middleware/auth.js";
 import { Router } from "express";
 
 import { invitationRateLimit } from "../middleware/rate-limit.js";
@@ -7,12 +8,16 @@ import {
   resolveInvitationSchema,
   setRsvpSchema,
 } from "../schemas/invitation.js";
-import { getInvitation, getInvitationIcs, setRsvp } from "../services/invitation.service.js";
+import {
+  getInvitation,
+  getInvitationIcs,
+  setRsvp,
+} from "../services/invitation.service.js";
 import { notFound } from "../lib/http-error.js";
 
 export const invitationRouter = Router();
 
-invitationRouter.use(invitationRateLimit);
+invitationRouter.use(invitationRateLimit, requireAdmin, requireSuper);
 
 invitationRouter.post(
   "/resolve",
@@ -20,17 +25,23 @@ invitationRouter.post(
   async (req, res) => {
     const invitation = await getInvitation(req.body.token);
     if (!invitation) {
-      throw notFound("Este enlace ya no es válido. Pide uno nuevo a los organizadores.");
+      throw notFound(
+        "Este enlace ya no es válido. Pide uno nuevo a los organizadores.",
+      );
     }
     res.setHeader("Cache-Control", "no-store");
     res.json(invitation);
   },
 );
 
-invitationRouter.patch("/rsvp", validateBody(setRsvpSchema), async (req, res) => {
-  res.setHeader("Cache-Control", "no-store");
-  res.json(await setRsvp(req.body));
-});
+invitationRouter.patch(
+  "/rsvp",
+  validateBody(setRsvpSchema),
+  async (req, res) => {
+    res.setHeader("Cache-Control", "no-store");
+    res.json(await setRsvp(req.body));
+  },
+);
 
 invitationRouter.post(
   "/calendar.ics",

@@ -9,6 +9,8 @@ export const logger = pino({
       'req.headers["x-admin-key"]',
       "req.headers.authorization",
       "req.body.token",
+      "res.body.key",
+      "req.body.key",
       "res.headers['set-cookie']",
     ],
     censor: "[redactado]",

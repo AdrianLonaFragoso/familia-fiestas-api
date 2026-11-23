@@ -1,3 +1,6 @@
+import { scopeAdmin } from "../middleware/scope.js";
+import { accountsRouter } from "./accounts.routes.js";
+import { identity } from "../middleware/auth.js";
 import { Router } from "express";
 import { ANN_CATEGORIES, ANN_PRIORITY, RSVP_LABEL } from "../lib/labels.js";
 import { z } from "zod";
@@ -28,7 +31,10 @@ import {
   venueCreateSchema,
   venueUpdateSchema,
 } from "../schemas/admin.js";
-import { announcementsQuerySchema, participantsQuerySchema } from "../schemas/public.js";
+import {
+  announcementsQuerySchema,
+  participantsQuerySchema,
+} from "../schemas/public.js";
 import { registrationsQuerySchema } from "../schemas/registration.js";
 import { uuidSchema } from "../schemas/common.js";
 import {
@@ -111,12 +117,26 @@ const tokensQuerySchema = z.object({
 export const adminRouter = Router();
 
 adminRouter.use(requireAdmin);
+adminRouter.get("/me", (_req, res) => {
+  res.json(identity(res));
+});
+adminRouter.use("/accounts", accountsRouter);
+adminRouter.use(scopeAdmin);
 
 adminRouter.get("/options", (_req, res) => {
   res.json({
-    announcement_categories: ANN_CATEGORIES.map(([value, label]) => ({ value, label })),
-    announcement_priorities: ANN_PRIORITY.map(([value, label]) => ({ value, label })),
-    rsvp_statuses: Object.entries(RSVP_LABEL).map(([value, label]) => ({ value, label })),
+    announcement_categories: ANN_CATEGORIES.map(([value, label]) => ({
+      value,
+      label,
+    })),
+    announcement_priorities: ANN_PRIORITY.map(([value, label]) => ({
+      value,
+      label,
+    })),
+    rsvp_statuses: Object.entries(RSVP_LABEL).map(([value, label]) => ({
+      value,
+      label,
+    })),
   });
 });
 
@@ -124,31 +144,51 @@ adminRouter.get("/options", (_req, res) => {
 adminRouter.get("/events", async (_req, res) => {
   res.json(await listEvents(true));
 });
-adminRouter.post("/events", validateBody(eventCreateSchema), async (req, res) => {
-  res.status(201).json(await createEvent(req.body));
-});
-adminRouter.patch("/events/:id", validateBody(eventUpdateSchema), async (req, res) => {
-  res.json(await updateEvent(String(req.params.id), req.body));
-});
+adminRouter.post(
+  "/events",
+  validateBody(eventCreateSchema),
+  async (req, res) => {
+    res.status(201).json(await createEvent(req.body));
+  },
+);
+adminRouter.patch(
+  "/events/:id",
+  validateBody(eventUpdateSchema),
+  async (req, res) => {
+    res.json(await updateEvent(String(req.params.id), req.body));
+  },
+);
 adminRouter.delete("/events/:id", async (req, res) => {
   await deleteEvent(String(req.params.id));
   res.status(204).send();
 });
 
-adminRouter.put("/events/:id/guests", validateBody(assigneesSchema), async (req, res) => {
-  res.json(await setEventGuests(String(req.params.id), req.body.guest_ids));
-});
+adminRouter.put(
+  "/events/:id/guests",
+  validateBody(assigneesSchema),
+  async (req, res) => {
+    res.json(await setEventGuests(String(req.params.id), req.body.guest_ids));
+  },
+);
 
 // Sedes
 adminRouter.get("/venues", async (_req, res) => {
   res.json(await listVenues());
 });
-adminRouter.post("/venues", validateBody(venueCreateSchema), async (req, res) => {
-  res.status(201).json(await createVenue(req.body));
-});
-adminRouter.patch("/venues/:id", validateBody(venueUpdateSchema), async (req, res) => {
-  res.json(await updateVenue(String(req.params.id), req.body));
-});
+adminRouter.post(
+  "/venues",
+  validateBody(venueCreateSchema),
+  async (req, res) => {
+    res.status(201).json(await createVenue(req.body));
+  },
+);
+adminRouter.patch(
+  "/venues/:id",
+  validateBody(venueUpdateSchema),
+  async (req, res) => {
+    res.json(await updateVenue(String(req.params.id), req.body));
+  },
+);
 adminRouter.delete("/venues/:id", async (req, res) => {
   await deleteVenue(String(req.params.id));
   res.status(204).send();
@@ -158,12 +198,20 @@ adminRouter.delete("/venues/:id", async (req, res) => {
 adminRouter.get("/families", async (_req, res) => {
   res.json(await listFamilies());
 });
-adminRouter.post("/families", validateBody(familyCreateSchema), async (req, res) => {
-  res.status(201).json(await createFamily(req.body));
-});
-adminRouter.patch("/families/:id", validateBody(familyUpdateSchema), async (req, res) => {
-  res.json(await updateFamily(String(req.params.id), req.body));
-});
+adminRouter.post(
+  "/families",
+  validateBody(familyCreateSchema),
+  async (req, res) => {
+    res.status(201).json(await createFamily(req.body));
+  },
+);
+adminRouter.patch(
+  "/families/:id",
+  validateBody(familyUpdateSchema),
+  async (req, res) => {
+    res.json(await updateFamily(String(req.params.id), req.body));
+  },
+);
 adminRouter.delete("/families/:id", async (req, res) => {
   await deleteFamily(String(req.params.id));
   res.status(204).send();
@@ -177,12 +225,20 @@ adminRouter.get("/guests", async (req, res) => {
 adminRouter.get("/guests/:id", async (req, res) => {
   res.json(await getGuest(String(req.params.id)));
 });
-adminRouter.post("/guests", validateBody(guestCreateSchema), async (req, res) => {
-  res.status(201).json(await createGuest(req.body));
-});
-adminRouter.patch("/guests/:id", validateBody(guestUpdateSchema), async (req, res) => {
-  res.json(await updateGuest(String(req.params.id), req.body));
-});
+adminRouter.post(
+  "/guests",
+  validateBody(guestCreateSchema),
+  async (req, res) => {
+    res.status(201).json(await createGuest(req.body));
+  },
+);
+adminRouter.patch(
+  "/guests/:id",
+  validateBody(guestUpdateSchema),
+  async (req, res) => {
+    res.json(await updateGuest(String(req.params.id), req.body));
+  },
+);
 adminRouter.delete("/guests/:id", async (req, res) => {
   await deleteGuest(String(req.params.id));
   res.status(204).send();
@@ -222,12 +278,18 @@ adminRouter.post(
   "/events/:eventId/hosts",
   validateBody(hostCreateSchema),
   async (req, res) => {
-    res.status(201).json(await createHost(String(req.params.eventId), req.body));
+    res
+      .status(201)
+      .json(await createHost(String(req.params.eventId), req.body));
   },
 );
-adminRouter.patch("/hosts/:id", validateBody(hostUpdateSchema), async (req, res) => {
-  res.json(await updateHost(String(req.params.id), req.body));
-});
+adminRouter.patch(
+  "/hosts/:id",
+  validateBody(hostUpdateSchema),
+  async (req, res) => {
+    res.json(await updateHost(String(req.params.id), req.body));
+  },
+);
 adminRouter.delete("/hosts/:id", async (req, res) => {
   await deleteHost(String(req.params.id));
   res.status(204).send();
@@ -241,7 +303,9 @@ adminRouter.post(
   "/events/:eventId/menu-items",
   validateBody(menuItemCreateSchema),
   async (req, res) => {
-    res.status(201).json(await createMenuItem(String(req.params.eventId), req.body));
+    res
+      .status(201)
+      .json(await createMenuItem(String(req.params.eventId), req.body));
   },
 );
 adminRouter.patch(
@@ -292,7 +356,10 @@ adminRouter.patch(
   validateBody(assigneesSchema),
   async (req, res) => {
     res.json(
-      await setResponsibilityAssignees(String(req.params.id), req.body.guest_ids),
+      await setResponsibilityAssignees(
+        String(req.params.id),
+        req.body.guest_ids,
+      ),
     );
   },
 );
@@ -305,7 +372,9 @@ adminRouter.post(
   "/events/:eventId/activities",
   validateBody(activityCreateSchema),
   async (req, res) => {
-    res.status(201).json(await createActivity(String(req.params.eventId), req.body));
+    res
+      .status(201)
+      .json(await createActivity(String(req.params.eventId), req.body));
   },
 );
 adminRouter.patch(

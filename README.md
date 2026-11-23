@@ -62,9 +62,9 @@ Base: `http://localhost:3000/api/v1`.
 | `GET` | `/events/:slug/calendar/google` | URL de Google Calendar. |
 | `GET` | `/announcements` | Avisos activos ordenados. Filtros: `event_id`, `priority`, `limit`. |
 | `GET` | `/families` | Familias con número de integrantes. |
-| `GET` | `/participants` | Directorio público limitado: nombre, avatar, familia, etiqueta y estado por evento. |
+| `GET` | `/participants` | Directorio privado de organizadores: nombre, avatar, familia, etiqueta y estado por evento. |
 
-El directorio público **no** expone notas privadas, datos dietéticos ni tokens de invitación.
+El directorio **no** expone notas privadas, datos dietéticos ni tokens de invitación.
 
 ### Inscripciones públicas
 
@@ -209,3 +209,29 @@ El intercambio público es exclusivamente para adultos que asistan a Navidad el 
 ### Liberación y contenido de eventos
 
 Los eventos nuevos nacen sin liberar (`is_released: false`). Administración lista todos; público lista solo liberados. `/home.upcoming_events` menciona los no liberados hasta terminar su fecha en America/Mexico_City, sin enlaces ni registro. Desliberar conserva invitados e inscripciones; páginas y calendarios públicos responden 404. Contenido editable: `dress_code`, `contributions`, `exchange_rules`, `additional_activities` y `registration_deadline` (informativa, sin cierre automático). Aplicar el parche aditivo `prisma/patches/20261122_event_release.sql` del backend antes de desplegar.
+
+## Niveles de acceso (2026-11-23)
+
+- **Público:** homepage con fecha, horarios, lugar y anfitriones; registro y avisos publicados. Sin contadores, directorio, familias, próximos eventos ni páginas completas. Las bases del intercambio son información del registro.
+- **Anfitrión:** clave propia, varios eventos asignables y varias cuentas por evento. Gestiona datos, sede, anfitriones visibles, invitados/asistencias, inscripciones, actividades y avisos de esos eventos. No crea, borra ni libera eventos, ni cambia su slug. No administra cuentas ni avisos globales ni invitaciones con tokens.
+- **Superusuario:** `ADMIN_API_KEY` actual, con acceso total y sección «Usuarios y accesos». No es necesario cambiar la clave ni crear una cuenta inicial en DB.
+
+### Flujo de cuentas y claves
+
+Entrar a `/admin` con la clave actual → Usuarios y accesos → Crear anfitrión → nombre, correo opcional y casillas de eventos → guardar y copiar la clave mostrada una sola vez. La entrega al anfitrión es manual. Se puede editar, reasignar, desactivar/reactivar, reemplazar claves (revoca todas las previas) o revocar una clave concreta. Desactivar no borra información; reactivar permite usar claves no revocadas. Se guarda SHA-256 de una clave aleatoria de 256 bits; GET nunca entrega clave completa ni digest. No hay contraseñas ni JWT.
+
+### Alcance y perfiles compartidos
+
+Express comprueba identidad y asignaciones en cada petición, IDs anidados y cuerpos de escritura. Las listas, métricas y estados se limitan a eventos asignados. Un anfitrión puede crear perfiles nuevos vinculados a sus eventos y editar perfiles/familias/sedes exclusivos de su alcance; los compartidos con eventos ajenos requieren superusuario para modificar sus datos globales. Retirar una persona desde la lista de invitados del evento no elimina su perfil. El borrado global de invitados, familias o sedes es exclusivo del superusuario. Las notas privadas de perfiles compartidos y todos los tokens se ocultan a anfitriones.
+
+Las familias/sedes creadas por un anfitrión se identifican con `created_by_account_id` para ser visibles antes de vincular invitados/eventos. El texto público de «Anfitriones» y las cuentas de acceso son relaciones distintas: mostrar un nombre nunca otorga permisos.
+
+### API y despliegue
+
+Aplicar primero `prisma/patches/20261123_access_levels.sql` del backend; el parche es aditivo e idempotente. No ejecutar el seed global. Tablas nuevas: access_accounts, access_keys y account_events. Cero cambios a claves actuales, invitados o confirmaciones.
+
+`GET /admin/me` devuelve id, name, role y event_ids. Solo superusuario: GET/POST /admin/accounts; PATCH /admin/accounts/:id (name, email, is_active, event_ids); POST /admin/accounts/:id/rotate-key; POST /admin/accounts/:id/revoke-key/:keyId. Cuentas y claves usan respuestas snake_case.
+
+/home y /events devuelven una proyección pública o autorizada según X-Admin-Key; no se deben tratar todos sus campos como públicos. Bundle, calendario, directorio y familias requieren clave. /families e invitaciones con token quedan solo para superusuario; anfitriones usan /admin/families. Accesos privados usan Cache-Control: no-store. El frontend limpia consultas al salir/cambiar de cuenta y consulta nuevamente la identidad al volver a la pestaña. La UI adapta menús y controles; la autorización efectiva pertenece a Express.
+
+Desplegar ambas capas coordinadamente por el cambio del contrato público. La migración ya se aplicó en Neon el 2026-11-23, en un solo intento HTTPS sin error. Las nuevas cuentas se crean desde el panel después del despliegue. La verificación de permisos utiliza fixtures en memoria; no crea cuentas de prueba en Neon.
