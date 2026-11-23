@@ -110,7 +110,7 @@ export async function getHome(): Promise<HomePayload> {
   const publicEvents = released.map((event) => ({ ...event, is_next: event.id === nextId }));
   return {
     events: publicEvents,
-    upcoming_events: events.filter((event) => event.is_released === false && eventDayEnd(event.event_date).getTime() >= Date.now()).map(({ id, name, event_date, description, display, venue }) => ({ id, name, event_date, description, display, venue })),
+    upcoming_events: events.filter((event) => event.is_released === false && eventDayEnd(event.event_date).getTime() >= Date.now()).map(({ id, slug, name, event_date, description, display, venue }) => ({ id, slug, name, event_date, description, display, venue })),
     announcements,
     next_event: publicEvents.find((event) => event.is_next) ?? null,
     featured_announcements: featuredAnnouncements(announcements),

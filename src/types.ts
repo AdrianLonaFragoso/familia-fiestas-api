@@ -268,7 +268,7 @@ export type Invitation = {
   }[];
 };
 
-export type UpcomingEvent = Pick<EventSummary, "id" | "name" | "event_date" | "description" | "display" | "venue">;
+export type UpcomingEvent = Pick<EventSummary, "id" | "slug" | "name" | "event_date" | "description" | "display" | "venue">;
 
 export type HomePayload = {
   upcoming_events?: UpcomingEvent[];

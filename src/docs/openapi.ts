@@ -103,7 +103,7 @@ export const openApiDocument = {
         tags: ["Público"],
         summary: "Datos agregados de la página de inicio",
         description:
-          "Incluye events liberados con contadores; upcoming_events contiene solo menciones de eventos no liberados cuya fecha aún no termina en America/Mexico_City. También incluye avisos ordenados, próxima celebración liberada y avisos destacados.",
+          "Incluye events liberados con contadores; upcoming_events incluye slug para identificar su imagen y contiene solo menciones de eventos no liberados cuya fecha aún no termina en America/Mexico_City. También incluye avisos ordenados, próxima celebración liberada y avisos destacados.",
         responses: { "200": okJson("Contenido de inicio") },
       },
     },
