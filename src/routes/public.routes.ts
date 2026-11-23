@@ -7,7 +7,7 @@ import {
   announcementsQuerySchema,
   participantsQuerySchema,
 } from "../schemas/public.js";
-import { registrationSchema } from "../schemas/registration.js";
+import { registrationSchema, registrationBatchSchema } from "../schemas/registration.js";
 import { listAnnouncements } from "../services/announcement.service.js";
 import {
   getEventBundle,
@@ -18,7 +18,7 @@ import {
 } from "../services/event.service.js";
 import { listFamilies } from "../services/family.service.js";
 import { listParticipants } from "../services/participant.service.js";
-import { registerForEvent } from "../services/registration.service.js";
+import { registerForEvent, registerForEvents } from "../services/registration.service.js";
 
 export const publicRouter = Router();
 
@@ -75,3 +75,8 @@ publicRouter.post(
     res.status(201).json(await registerForEvent(req.body));
   },
 );
+
+publicRouter.post("/registrations/batch", registrationRateLimit, validateBody(registrationBatchSchema), async (req, res) => {
+  res.setHeader("Cache-Control", "no-store");
+  res.status(201).json(await registerForEvents(req.body));
+});

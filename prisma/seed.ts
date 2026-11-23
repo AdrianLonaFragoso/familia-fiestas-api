@@ -72,12 +72,12 @@ async function main() {
     await prisma.event.upsert({
       where: { slug },
       update: { name, eventDate: date },
-      create: { slug, name, eventDate: date, giftExchangeEnabled: slug === "navidad" },
+      create: { slug, name, eventDate: date, isReleased: true, giftExchangeEnabled: slug === "navidad" },
     });
   }
 
   const [events, guests] = await Promise.all([
-    prisma.event.findMany({ select: { id: true } }),
+    prisma.event.findMany({ where: { slug: { in: EVENTS.map(([slug]) => slug) } }, select: { id: true } }),
     prisma.guest.findMany({ select: { id: true } }),
   ]);
 

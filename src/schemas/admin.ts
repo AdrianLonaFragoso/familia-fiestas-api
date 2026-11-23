@@ -25,6 +25,12 @@ const sortOrder = z.coerce.number().int().min(0).optional();
 export const eventCreateSchema = z.object({
   slug: z.string().trim().min(1).max(80).regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, "Usa minúsculas, números y guiones."),
   name: shortText.trim().min(1),
+  is_released: z.boolean().optional(),
+  dress_code: nullableText,
+  contributions: nullableText,
+  exchange_rules: nullableText,
+  additional_activities: nullableText,
+  registration_deadline: dateSchema.nullable().optional(),
   gift_exchange_enabled: z.boolean().optional(),
   event_date: dateSchema,
   arrival_time: optionalTime,

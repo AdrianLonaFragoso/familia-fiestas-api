@@ -25,7 +25,7 @@ import {
   responsibilityStatusLabel,
   rsvpLabel,
 } from "../lib/labels.js";
-import { hasGiftExchange } from "../lib/event-rules.js";
+import { hasGiftExchange, registrationExchangeEnabled } from "../lib/event-rules.js";
 import type {
   Activity,
   AdminGuest,
@@ -64,6 +64,12 @@ export type EventRecord = {
   id: string;
   slug: string;
   name: string;
+  isReleased?: boolean;
+  dressCode?: string | null;
+  contributions?: string | null;
+  exchangeRules?: string | null;
+  additionalActivities?: string | null;
+  registrationDeadline?: DateLike | null;
   giftExchangeEnabled?: boolean;
   eventDate: DateLike;
   arrivalTime: DateLike | null;
@@ -116,7 +122,15 @@ export function mapEvent(event: EventRecord, venue: VenueRecord | null): EventRo
     observations: event.observations,
     venue_id: event.venueId,
     updated_at: isoRequired(event.updatedAt),
+    is_released: event.isReleased ?? true,
+    dress_code: event.dressCode ?? null,
+    contributions: event.contributions ?? null,
+    exchange_rules: event.exchangeRules ?? null,
+    additional_activities: event.additionalActivities ?? null,
+    registration_deadline: event.registrationDeadline ? dateOnly(event.registrationDeadline) : null,
+    registration_deadline_label: event.registrationDeadline ? formatDateLong(dateOnly(event.registrationDeadline)) : null,
     gift_exchange_enabled: hasGiftExchange(event),
+    registration_exchange_enabled: registrationExchangeEnabled(event),
     display: {
       date_long: formatDateLong(eventDate),
       date_short: formatDateShort(eventDate),

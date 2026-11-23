@@ -1,8 +1,9 @@
+import type { Prisma } from "../generated/prisma/client.js";
 import { getPrisma } from "../db/prisma.js";
-import { hasGiftExchange, normalizeEmail } from "../lib/event-rules.js";
+import { registrationExchangeEnabled, isChildGuest, normalizeEmail } from "../lib/event-rules.js";
 import { conflict, HttpError, notFound, unprocessable } from "../lib/http-error.js";
 import { mapRegistration } from "../serializers/index.js";
-import type { RegistrationInput } from "../schemas/registration.js";
+import type { RegistrationInput, RegistrationBatchInput } from "../schemas/registration.js";
 import type { Registration } from "../types.js";
 
 const DUPLICATE_MESSAGE = "Ese correo ya está inscrito en esta celebración.";
@@ -19,19 +20,22 @@ const DUPLICATE_MESSAGE = "Ese correo ya está inscrito en esta celebración.";
  * - Crea o actualiza la asistencia del evento; si ya se había inscrito antes
  *   con ese correo, responde 409.
  */
-export async function registerForEvent(input: RegistrationInput): Promise<Registration> {
-  const prisma = getPrisma();
+export async function registerForEvent(input: RegistrationInput, transaction?: Prisma.TransactionClient): Promise<Registration> {
+  const prisma = transaction ?? getPrisma();
   const event = await prisma.event.findUnique({
     where: { id: input.event_id },
-    select: { id: true, slug: true, name: true, eventDate: true, giftExchangeEnabled: true },
+    select: { id: true, slug: true, name: true, eventDate: true, giftExchangeEnabled: true, isReleased: true },
   });
-  if (!event) throw notFound("Celebración no encontrada.");
+  if (!event || event.isReleased === false) throw notFound("Celebración no encontrada.");
 
-  const giftExchange = hasGiftExchange(event);
+  const giftExchange = registrationExchangeEnabled(event);
   if (input.participates_in_exchange && !giftExchange) {
-    throw unprocessable("Esta celebración no tiene intercambio de regalos.");
+    throw unprocessable("El intercambio es solo para adultos que asistan a Navidad, el 24 de diciembre.");
   }
 
+  if (input.participates_in_exchange && input.is_child) {
+    throw unprocessable("El intercambio es exclusivo para adultos. Los niños pueden confirmar su asistencia sin participar.");
+  }
   const participates = giftExchange && input.participates_in_exchange;
   const giftSuggestions = participates ? input.gift_suggestions?.trim() || null : null;
 
@@ -52,7 +56,7 @@ export async function registerForEvent(input: RegistrationInput): Promise<Regist
   const fullName = input.full_name.trim();
 
   try {
-    return await prisma.$transaction(async (tx) => {
+    const save = async (tx: Prisma.TransactionClient) => {
       let existingGuest = email ? await tx.guest.findUnique({ where: { email } }) : null;
       if (!email) {
         // Serializa inscripciones sin correo del mismo nombre, incluso entre eventos.
@@ -66,7 +70,7 @@ export async function registerForEvent(input: RegistrationInput): Promise<Regist
           throw conflict("Hay varias personas sin correo con ese nombre. Pide a un organizador que complete la inscripción desde el panel.");
         }
         existingGuest = matches[0] ?? null;
-        if (existingGuest && !["niño", "niña", "niño/a"].includes(existingGuest.tag?.trim().toLocaleLowerCase("es") ?? "")) {
+        if (existingGuest && !isChildGuest(existingGuest)) {
           throw conflict("Ya existe una persona sin correo con ese nombre. Pide a un organizador que confirme su inscripción desde el panel.");
         }
       }
@@ -105,12 +109,16 @@ export async function registerForEvent(input: RegistrationInput): Promise<Regist
             });
       }
 
+      if (participates && isChildGuest(guest)) {
+        throw unprocessable("El intercambio es exclusivo para adultos. Los niños pueden confirmar su asistencia sin participar.");
+      }
+
       const existing = await tx.eventGuest.findUnique({
         where: { eventId_guestId: { eventId: event.id, guestId: guest.id } },
       });
 
       if (existing?.registeredAt) {
-        throw conflict(duplicateMessage);
+        throw conflict(duplicateMessage, { event_id: event.id, event_name: event.name });
       }
 
       // El avatar pertenece a la persona y se comparte entre sus celebraciones.
@@ -158,7 +166,8 @@ export async function registerForEvent(input: RegistrationInput): Promise<Regist
         guest: fullGuest,
         event,
       });
-    });
+    };
+    return transaction ? await save(transaction) : await getPrisma().$transaction(save);
   } catch (error) {
     if (error instanceof HttpError) throw error;
     if ((error as { code?: string }).code === "P2002") {
@@ -166,6 +175,30 @@ export async function registerForEvent(input: RegistrationInput): Promise<Regist
     }
     throw error;
   }
+}
+
+/** Todas las fechas se confirman juntas; cualquier error revierte el registro completo. */
+export async function registerForEvents(input: RegistrationBatchInput): Promise<{ registrations: Registration[] }> {
+  return getPrisma().$transaction(async (tx) => {
+    const events = await tx.event.findMany({
+      where: { id: { in: input.event_ids } },
+      select: { id: true, slug: true, eventDate: true, giftExchangeEnabled: true, isReleased: true },
+    });
+    if (events.length !== input.event_ids.length || events.some((event) => event.isReleased === false)) throw notFound("Una de las fechas seleccionadas ya no está disponible.");
+    const exchangeEvent = events.find(registrationExchangeEnabled);
+    if (input.participates_in_exchange && (!exchangeEvent || input.is_child)) {
+      throw unprocessable("El intercambio es solo para adultos que confirmen Navidad, el 24 de diciembre.");
+    }
+    const registrations: Registration[] = [];
+    for (const eventId of input.event_ids) {
+      const participates = input.participates_in_exchange && eventId === exchangeEvent?.id;
+      registrations.push(await registerForEvent({
+        ...input, event_id: eventId, participates_in_exchange: participates,
+        gift_suggestions: participates ? input.gift_suggestions : null,
+      }, tx));
+    }
+    return { registrations };
+  });
 }
 
 export async function listRegistrations(filters: {
@@ -194,7 +227,7 @@ export async function listRegistrations(filters: {
     },
     include: {
       guest: { include: { family: { select: { name: true } } } },
-      event: { select: { id: true, slug: true, name: true, eventDate: true, giftExchangeEnabled: true } },
+      event: { select: { id: true, slug: true, name: true, eventDate: true, giftExchangeEnabled: true, isReleased: true } },
     },
     orderBy: { registeredAt: "desc" },
   });

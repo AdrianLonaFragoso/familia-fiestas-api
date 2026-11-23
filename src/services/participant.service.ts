@@ -15,12 +15,13 @@ export async function listParticipants(filters: {
         ? { fullName: { contains: filters.search, mode: "insensitive" as const } }
         : {}),
       ...(filters.event_id
-        ? { eventGuests: { some: { eventId: filters.event_id } } }
+        ? { eventGuests: { some: { eventId: filters.event_id, event: { isReleased: true } } } }
         : {}),
     },
     include: {
       family: { select: { name: true } },
       eventGuests: {
+        where: { event: { isReleased: true } },
         include: {
           event: {
             select: {

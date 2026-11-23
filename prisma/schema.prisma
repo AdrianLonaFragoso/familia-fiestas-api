@@ -86,6 +86,12 @@ model Event {
   dinnerTime          DateTime? @map("dinner_time") @db.Time(6)
   endTime             DateTime? @map("end_time") @db.Time(6)
   description         String?
+  isReleased          Boolean   @default(false) @map("is_released")
+  dressCode           String?   @map("dress_code")
+  contributions       String?
+  exchangeRules       String?   @map("exchange_rules")
+  additionalActivities String?  @map("additional_activities")
+  registrationDeadline DateTime? @map("registration_deadline") @db.Date
   giftExchangeEnabled Boolean   @default(false) @map("gift_exchange_enabled")
   observations        String?
   venueId             String?   @map("venue_id") @db.Uuid

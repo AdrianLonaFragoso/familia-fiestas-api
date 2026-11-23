@@ -122,7 +122,7 @@ adminRouter.get("/options", (_req, res) => {
 
 // Celebración
 adminRouter.get("/events", async (_req, res) => {
-  res.json(await listEvents());
+  res.json(await listEvents(true));
 });
 adminRouter.post("/events", validateBody(eventCreateSchema), async (req, res) => {
   res.status(201).json(await createEvent(req.body));

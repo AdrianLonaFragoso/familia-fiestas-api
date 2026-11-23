@@ -56,7 +56,15 @@ export type EventRow = {
   observations: string | null;
   venue_id: string | null;
   updated_at: string;
+  is_released?: boolean;
+  dress_code?: string | null;
+  contributions?: string | null;
+  exchange_rules?: string | null;
+  additional_activities?: string | null;
+  registration_deadline?: string | null;
+  registration_deadline_label?: string | null;
   gift_exchange_enabled: boolean;
+  registration_exchange_enabled: boolean;
   display: EventDisplay;
   calendar: CalendarInfo;
 };
@@ -260,7 +268,10 @@ export type Invitation = {
   }[];
 };
 
+export type UpcomingEvent = Pick<EventSummary, "id" | "name" | "event_date" | "description" | "display" | "venue">;
+
 export type HomePayload = {
+  upcoming_events?: UpcomingEvent[];
   events: EventSummary[];
   announcements: Announcement[];
   next_event: EventSummary | null;

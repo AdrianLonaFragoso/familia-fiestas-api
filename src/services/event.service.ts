@@ -3,6 +3,7 @@ import {
   buildIcs,
   calendarMissing,
   dateOnly,
+  eventDayEnd,
   googleCalendarUrl,
 } from "../lib/dates.js";
 import { notFound, unprocessable } from "../lib/http-error.js";
@@ -30,9 +31,10 @@ import type { z } from "zod";
 type EventCreateInput = z.infer<typeof eventCreateSchema>;
 type EventUpdateInput = z.infer<typeof eventUpdateSchema>;
 
-export async function listEvents(): Promise<EventSummary[]> {
+export async function listEvents(includeUnreleased = false): Promise<EventSummary[]> {
   const prisma = getPrisma();
   const rows = await prisma.event.findMany({
+    ...(includeUnreleased ? {} : { where: { isReleased: true } }),
     orderBy: { eventDate: "asc" },
     include: {
       venue: true,
@@ -67,7 +69,7 @@ export async function getEventBundle(slug: string): Promise<EventBundle | null> 
     },
   });
 
-  if (!event) return null;
+  if (!event || event.isReleased === false) return null;
 
   const announcements = await prisma.announcement.findMany({
     where: { isActive: true, OR: [{ eventId: event.id }, { eventId: null }] },
@@ -99,14 +101,18 @@ export async function getEventBundle(slug: string): Promise<EventBundle | null> 
 
 export async function getHome(): Promise<HomePayload> {
   const [events, announcements] = await Promise.all([
-    listEvents(),
+    listEvents(true),
     listAnnouncements(),
   ]);
 
+  const released = events.filter((event) => event.is_released !== false);
+  const nextId = nextEventId(released.map((event) => ({ id: event.id, eventDate: event.event_date, startTime: event.start_time, arrivalTime: event.arrival_time, endTime: event.end_time })));
+  const publicEvents = released.map((event) => ({ ...event, is_next: event.id === nextId }));
   return {
-    events,
+    events: publicEvents,
+    upcoming_events: events.filter((event) => event.is_released === false && eventDayEnd(event.event_date).getTime() >= Date.now()).map(({ id, name, event_date, description, display, venue }) => ({ id, name, event_date, description, display, venue })),
     announcements,
-    next_event: events.find((event) => event.is_next) ?? null,
+    next_event: publicEvents.find((event) => event.is_next) ?? null,
     featured_announcements: featuredAnnouncements(announcements),
   };
 }
@@ -119,7 +125,7 @@ export async function getEventIcs(
     where: { slug },
     include: { venue: true },
   });
-  if (!event) throw notFound("Celebración no encontrada.");
+  if (!event || event.isReleased === false) throw notFound("Celebración no encontrada.");
 
   const eventDate = dateOnly(event.eventDate);
   const input = {
@@ -151,7 +157,7 @@ export async function getEventCalendarLinks(slug: string): Promise<{
     where: { slug },
     include: { venue: true },
   });
-  if (!event) throw notFound("Celebración no encontrada.");
+  if (!event || event.isReleased === false) throw notFound("Celebración no encontrada.");
 
   const eventDate = dateOnly(event.eventDate);
   const input = {
@@ -178,6 +184,12 @@ export async function createEvent(input: EventCreateInput) {
     data: {
       slug: input.slug,
       name: input.name,
+      isReleased: input.is_released ?? false,
+      dressCode: input.dress_code ?? null,
+      contributions: input.contributions ?? null,
+      exchangeRules: input.exchange_rules ?? null,
+      additionalActivities: input.additional_activities ?? null,
+      registrationDeadline: input.registration_deadline ? parseDateOnly(input.registration_deadline) : null,
       giftExchangeEnabled: input.gift_exchange_enabled ?? false,
       eventDate: parseDateOnly(input.event_date),
       arrivalTime: optionalTime(input.arrival_time) ?? null,
@@ -201,6 +213,12 @@ export async function updateEvent(id: string, input: EventUpdateInput) {
   const event = await prisma.event.update({
     where: { id },
     data: {
+      ...(input.is_released !== undefined ? { isReleased: input.is_released } : {}),
+      ...(input.dress_code !== undefined ? { dressCode: input.dress_code } : {}),
+      ...(input.contributions !== undefined ? { contributions: input.contributions } : {}),
+      ...(input.exchange_rules !== undefined ? { exchangeRules: input.exchange_rules } : {}),
+      ...(input.additional_activities !== undefined ? { additionalActivities: input.additional_activities } : {}),
+      ...(input.registration_deadline !== undefined ? { registrationDeadline: input.registration_deadline ? parseDateOnly(input.registration_deadline) : null } : {}),
       ...(input.slug !== undefined ? { slug: input.slug } : {}),
       ...(input.name !== undefined ? { name: input.name } : {}),
       ...(input.gift_exchange_enabled !== undefined
@@ -243,7 +261,7 @@ export async function deleteEvent(id: string): Promise<void> {
 async function listAnnouncements() {
   const prisma = getPrisma();
   const rows = await prisma.announcement.findMany({
-    where: { isActive: true },
+    where: { isActive: true, OR: [{ eventId: null }, { event: { isReleased: true } }] },
     include: { event: { select: { name: true, slug: true } } },
     orderBy: { publishedAt: "desc" },
   });

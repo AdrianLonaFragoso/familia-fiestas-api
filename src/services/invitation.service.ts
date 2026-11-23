@@ -22,15 +22,15 @@ export async function getInvitation(token: string): Promise<Invitation | null> {
 
   const [eventGuests, responsibilityAssignments, menuAssignments] = await Promise.all([
     prisma.eventGuest.findMany({
-      where: { guestId },
+      where: { guestId, event: { isReleased: true } },
       include: { event: { include: { venue: true } } },
     }),
     prisma.responsibilityAssignee.findMany({
-      where: { guestId },
+      where: { guestId, responsibility: { event: { isReleased: true } } },
       include: { responsibility: { include: { event: true } } },
     }),
     prisma.menuItemAssignee.findMany({
-      where: { guestId },
+      where: { guestId, menuItem: { event: { isReleased: true } } },
       include: { menuItem: { include: { event: true } } },
     }),
   ]);
@@ -58,7 +58,7 @@ export async function setRsvp(input: {
   }
 
   const result = await resolved.prisma.eventGuest.updateMany({
-    where: { guestId: resolved.row.guest.id, eventId: input.event_id },
+    where: { guestId: resolved.row.guest.id, eventId: input.event_id, event: { isReleased: true } },
     data: { status: input.status, respondedAt: new Date() },
   });
 
@@ -84,7 +84,7 @@ export async function getInvitationIcs(input: {
   }
 
   const eventGuest = await resolved.prisma.eventGuest.findFirst({
-    where: { guestId: resolved.row.guest.id, eventId: input.event_id },
+    where: { guestId: resolved.row.guest.id, eventId: input.event_id, event: { isReleased: true } },
     include: { event: { include: { venue: true } } },
   });
   if (!eventGuest) throw notFound("No estás invitado a esta celebración.");

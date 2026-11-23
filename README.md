@@ -192,10 +192,20 @@ Las pruebas cubren estado del servicio, OpenAPI, autenticación de administraci�
 
 ## Configuración de eventos
 
-Los eventos aceptan `gift_exchange_enabled` (boolean; `false` al crear). Este campo controla el registro y la edición de participantes en cualquier evento, independientemente del slug. Desactivarlo conserva las participaciones y regalos existentes; el sorteo sigue pendiente.
+Los eventos aceptan `gift_exchange_enabled` (boolean; `false` al crear). Este campo controla la disponibilidad del intercambio del evento; el registro familiar público añade la restricción de adultos y Navidad el 24 de diciembre. Desactivarlo conserva las participaciones y regalos existentes; el sorteo sigue pendiente.
 
 `PUT /api/v1/admin/events/:id/guests` con `{ "guest_ids": ["<uuid>"] }` reemplaza la lista de un evento en una transacción. Conserva el estado de asistentes que permanecen y no modifica otras celebraciones. Los retirados pierden la asistencia/inscripción y datos de intercambio de ese evento; el perfil del invitado se conserva. Requiere `X-Admin-Key`.
 
 Para bases existentes sin historial de migraciones, aplicar una vez (se puede reejecutar) `pnpm exec prisma db execute --file prisma/patches/20261117_event_exchange.sql` y ejecutar `pnpm db:generate`. El parche añade la columna e inicializa Navidad con intercambio habilitado sin ejecutar el seed. En bases nuevas, `db:push` crea el campo y el seed inicializa Navidad al crearla.
 
 `GET /api/v1/admin/options` entrega las categorías/prioridades de avisos y estados RSVP con sus etiquetas, para que los formularios no dupliquen las reglas de la API.
+
+### Registro general y confirmación de fechas
+
+`POST /api/v1/registrations/batch` recibe `{ event_ids: ["<uuid>", "<uuid>"], full_name, email?, is_child?, avatar?, participates_in_exchange?, gift_suggestions? }` y devuelve `{ registrations: [...] }`. Exige al menos una fecha, sin IDs duplicados (máximo 20). Guarda todas las asistencias como `confirmed` en una única transacción; si una fecha ya estaba inscrita o no existe, revierte todo el envío. Un duplicado incluye `details.event_name` para que el usuario pueda desmarcar esa fecha y confirmar otra. Las fechas no seleccionadas no cambian. Conserva el endpoint individual para clientes anteriores.
+
+El intercambio público es exclusivamente para adultos que asistan a Navidad el 24 de diciembre y con intercambio habilitado en ese evento. En un envío con ambas fechas, la participación y regalos solo se guardan en Navidad. Se valida tanto `is_child` como la etiqueta infantil del perfil existente; no se recategorizan ni modifican registros anteriores. `registration_exchange_enabled` en los eventos es la disponibilidad derivada que usa el formulario. No hay migración de base de datos.
+
+### Liberación y contenido de eventos
+
+Los eventos nuevos nacen sin liberar (`is_released: false`). Administración lista todos; público lista solo liberados. `/home.upcoming_events` menciona los no liberados hasta terminar su fecha en America/Mexico_City, sin enlaces ni registro. Desliberar conserva invitados e inscripciones; páginas y calendarios públicos responden 404. Contenido editable: `dress_code`, `contributions`, `exchange_rules`, `additional_activities` y `registration_deadline` (informativa, sin cierre automático). Aplicar el parche aditivo `prisma/patches/20261122_event_release.sql` del backend antes de desplegar.

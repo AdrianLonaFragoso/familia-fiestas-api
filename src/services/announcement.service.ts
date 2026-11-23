@@ -11,6 +11,7 @@ export async function listAnnouncements(filters: {
   const rows = await prisma.announcement.findMany({
     where: {
       isActive: true,
+      OR: [{ eventId: null }, { event: { isReleased: true } }],
       ...(filters.event_id ? { eventId: filters.event_id } : {}),
       ...(filters.priority ? { priority: filters.priority } : {}),
     },

@@ -39,3 +39,14 @@ export const registrationsQuerySchema = z.object({
 });
 
 export type RegistrationInput = z.infer<typeof registrationSchema>;
+
+/** Registro único por persona que confirma una o más fechas en una transacción. */
+export const registrationBatchSchema = registrationSchema.innerType().omit({ event_id: true }).extend({
+  event_ids: z.array(uuidSchema).min(1, "Selecciona al menos una fecha.").max(20)
+    .refine((ids) => new Set(ids).size === ids.length, "No repitas una fecha."),
+}).superRefine((values, ctx) => {
+  if (!values.is_child && !values.email) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["email"], message: "El correo es obligatorio para adultos." });
+  }
+});
+export type RegistrationBatchInput = z.infer<typeof registrationBatchSchema>;

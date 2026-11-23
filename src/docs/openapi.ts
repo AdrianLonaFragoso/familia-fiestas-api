@@ -103,14 +103,14 @@ export const openApiDocument = {
         tags: ["Público"],
         summary: "Datos agregados de la página de inicio",
         description:
-          "Incluye eventos con contadores, avisos ordenados, próxima celebración y avisos destacados.",
+          "Incluye events liberados con contadores; upcoming_events contiene solo menciones de eventos no liberados cuya fecha aún no termina en America/Mexico_City. También incluye avisos ordenados, próxima celebración liberada y avisos destacados.",
         responses: { "200": okJson("Contenido de inicio") },
       },
     },
     "/events": {
       get: {
         tags: ["Público"],
-        summary: "Lista de celebraciones con contadores",
+        summary: "Lista de celebraciones liberadas con contadores",
         responses: { "200": okJson("Celebraciones") },
       },
     },
@@ -185,12 +185,32 @@ export const openApiDocument = {
         responses: { "200": okJson("Participantes") },
       },
     },
+    "/registrations/batch": {
+      post: {
+        tags: ["Público"],
+        summary: "Registrar una persona y confirmar una o varias fechas",
+        description: "Confirma todas las fechas en una transacción y devuelve {registrations: [...]}. Si una fecha es inválida o está duplicada, no guarda ninguna. No modifica fechas no seleccionadas. Adultos requieren correo; niños admiten is_child=true sin correo. El intercambio es opcional, solo para adultos que confirmen Navidad el 24 de diciembre, y solo se guarda en esa asistencia.",
+        requestBody: { required: true, content: { "application/json": { schema: {
+          type: "object", required: ["event_ids", "full_name"],
+          properties: {
+            event_ids: { type: "array", minItems: 1, maxItems: 20, uniqueItems: true, items: { type: "string", format: "uuid" } },
+            full_name: { type: "string", minLength: 2, maxLength: 120 },
+            email: { type: "string", nullable: true, description: "Obligatorio y válido para adultos; opcional para niños." },
+            is_child: { type: "boolean", default: false },
+            avatar: { type: "string", nullable: true, enum: [...AVATAR_IDS, null] },
+            participates_in_exchange: { type: "boolean", default: false },
+            gift_suggestions: { type: "string", maxLength: 500, nullable: true, description: "Obligatorio al participar." },
+          },
+        } } } },
+        responses: { "201": okJson("Fechas confirmadas"), "404": errorResponse, "409": errorResponse, "422": errorResponse, "429": errorResponse },
+      },
+    },
     "/registrations": {
       post: {
         tags: ["Público"],
         summary: "Inscribir a una persona en una celebración",
         description:
-          "Crea o reutiliza el invitado y confirma su asistencia (status=confirmed, registered_at y responded_at al inscribirse); no requiere RSVP posterior. Adultos requieren correo único por evento. Con is_child=true se permite omitir email o enviarlo null/vacío: se identifica por nombre completo sin correo; homónimos o perfiles sin etiqueta de niño se resuelven en administración. El intercambio depende de la configuración del evento.",
+          "Crea o reutiliza el invitado y confirma su asistencia (status=confirmed, registered_at y responded_at al inscribirse); no requiere RSVP posterior. Adultos requieren correo único por evento. Con is_child=true se permite omitir email o enviarlo null/vacío: se identifica por nombre completo sin correo; homónimos o perfiles sin etiqueta de niño se resuelven en administración. El intercambio del registro familiar es solo para adultos en Navidad el 24 de diciembre, con intercambio habilitado.",
         requestBody: {
           required: true,
           content: {
@@ -337,7 +357,7 @@ export const openApiDocument = {
         tags: ["Administración"],
         security: adminSecurity,
         summary: "Crear celebración",
-        description: "Acepta slug (minúsculas, números y guiones), name, event_date, horarios, descripción, venue_id y gift_exchange_enabled (boolean, false por defecto).",
+        description: "Acepta is_released (false por defecto), dress_code, contributions, exchange_rules, additional_activities, registration_deadline (informativa), slug (minúsculas, números y guiones), name, event_date, horarios, descripción, venue_id y gift_exchange_enabled (boolean, false por defecto).",
         requestBody: { required: true, content: { "application/json": { schema: { type: "object" } } } },
         responses: { "201": okJson("Celebración creada"), "401": errorResponse, "422": errorResponse },
       },
@@ -347,7 +367,7 @@ export const openApiDocument = {
         tags: ["Administración"],
         security: adminSecurity,
         summary: "Editar celebración",
-        description: "Actualización parcial; gift_exchange_enabled activa o desactiva el intercambio sin borrar participaciones ni sugerencias. El sorteo no está implementado.",
+        description: "Actualización parcial; is_released controla cards, menú y registro sin borrar asistencias. No liberados vigentes se mencionan en home.upcoming_events; sus páginas y calendarios públicos responden 404 y no aceptan inscripciones. gift_exchange_enabled activa o desactiva el intercambio sin borrar participaciones ni sugerencias. El sorteo no está implementado.",
         parameters: [idParam],
         requestBody: { required: true, content: { "application/json": { schema: { type: "object" } } } },
         responses: { "200": okJson("Celebración actualizada"), "401": errorResponse, "404": errorResponse },
