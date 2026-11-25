@@ -213,7 +213,7 @@ Los eventos nuevos nacen sin liberar (`is_released: false`). Administración lis
 ## Niveles de acceso (2026-11-23)
 
 - **Público:** homepage con fecha, horarios, lugar y anfitriones; registro y avisos publicados. Sin contadores, directorio, familias, próximos eventos ni páginas completas. Las bases del intercambio son información del registro.
-- **Anfitrión:** clave propia, varios eventos asignables y varias cuentas por evento. Gestiona datos, sede, anfitriones visibles, invitados/asistencias, inscripciones, actividades y avisos de esos eventos. No crea, borra ni libera eventos, ni cambia su slug. No administra cuentas ni avisos globales ni invitaciones con tokens.
+- **Anfitrión:** clave propia, varios eventos asignables y varias cuentas por evento. Gestiona datos, sede, anfitriones visibles, invitados/asistencias, inscripciones, actividades y avisos de esos eventos. No crea, borra ni libera eventos, ni cambia su slug. No administra cuentas de anfitrión ni avisos globales ni invitaciones con tokens. Sí gestiona accesos de invitados de sus eventos.
 - **Superusuario:** `ADMIN_API_KEY` actual, con acceso total y sección «Usuarios y accesos». No es necesario cambiar la clave ni crear una cuenta inicial en DB.
 
 ### Flujo de cuentas y claves
@@ -230,8 +230,31 @@ Las familias/sedes creadas por un anfitrión se identifican con `created_by_acco
 
 Aplicar primero `prisma/patches/20261123_access_levels.sql` del backend; el parche es aditivo e idempotente. No ejecutar el seed global. Tablas nuevas: access_accounts, access_keys y account_events. Cero cambios a claves actuales, invitados o confirmaciones.
 
-`GET /admin/me` devuelve id, name, role y event_ids. Solo superusuario: GET/POST /admin/accounts; PATCH /admin/accounts/:id (name, email, is_active, event_ids); POST /admin/accounts/:id/rotate-key; POST /admin/accounts/:id/revoke-key/:keyId. Cuentas y claves usan respuestas snake_case.
+`GET /admin/me` devuelve id, name, role, event_ids y guest_id para invitados. Solo superusuario crea/edita anfitriones y asignaciones. GET /admin/accounts lista todas las cuentas para superusuario y solo accesos de invitados propios para anfitriones; activar/desactivar, rotar o revocar estos accesos respeta el mismo alcance. Cuentas y claves usan respuestas snake_case.
 
 /home y /events devuelven una proyección pública o autorizada según X-Admin-Key; no se deben tratar todos sus campos como públicos. Bundle, calendario, directorio y familias requieren clave. /families e invitaciones con token quedan solo para superusuario; anfitriones usan /admin/families. Accesos privados usan Cache-Control: no-store. El frontend limpia consultas al salir/cambiar de cuenta y consulta nuevamente la identidad al volver a la pestaña. La UI adapta menús y controles; la autorización efectiva pertenece a Express.
 
 Desplegar ambas capas coordinadamente por el cambio del contrato público. La migración ya se aplicó en Neon el 2026-11-23, en un solo intento HTTPS sin error. Las nuevas cuentas se crean desde el panel después del despliegue. La verificación de permisos utiliza fixtures en memoria; no crea cuentas de prueba en Neon.
+
+
+## Perfil de invitados (2026-11-25)
+
+`/profile/:guestId` pide la clave personal recibida por correo o WhatsApp. El enlace solo contiene el UUID del invitado; la clave se pega aparte y se envía en `X-Admin-Key`. La sesión dura hasta cerrar la pestaña. El rol `guest` permite editar únicamente el propio nombre, correo, avatar, familia existente y respuestas a eventos invitados. No accede al panel, a otros perfiles, a directorios ni a páginas completas de eventos. También muestra fecha, hora, sede y anfitriones de sus invitaciones. Adultos conservan correo obligatorio; niños pueden omitirlo. No permite crear familias ni editar etiquetas/roles.
+
+En `/admin` → **Usuarios y accesos** → **Accesos e invitaciones de invitados**, superusuario y anfitriones pueden buscar personas existentes y marcar su invitación al evento seleccionado. Invitar conserva una respuesta existente o crea una pendiente; retirar elimina la asistencia/inscripción e intercambio de ese evento, conservando el perfil, la cuenta y otros eventos. Los anfitriones solo modifican sus eventos y generan/gestionan accesos de personas invitadas a ellos. La búsqueda entrega únicamente nombre, avatar, familia y vínculo a eventos en alcance. El formulario público de registro no cambia.
+
+**Generar acceso y compartir** muestra la clave una sola vez en un modal con enlace e instrucciones. **Copiar correo para Gmail** copia HTML y texto alternativo; abre un mensaje nuevo en Gmail, deja desactivado «Modo de texto sin formato» y pega normalmente en el cuerpo. Plantilla de tablas con estilos inline y fuentes del sistema, sin imágenes externas. El asunto sugerido se copia aparte. **Copiar mensaje** y **Compartir por WhatsApp** (`wa.me`) permiten entrega manual. No hay envío automático ni servicio de correo. Para compartir otra vez hay que generar una nueva clave: invalida las anteriores y reactiva el acceso. Desactivar o revocar no borra el perfil.
+
+API Express (requiere clave; respuestas privadas `no-store`):
+
+| Método | Ruta | Contrato |
+| --- | --- | --- |
+| GET/PATCH | `/api/v1/profile/:guestId` | Perfil propio; patch `full_name`, `email`, `avatar`, `family_id` existente o null. |
+| PATCH | `/api/v1/profile/:guestId/events/:eventId` | `status`, `participates_in_exchange`, `gift_suggestions`; solo invitaciones existentes. |
+| GET | `/api/v1/admin/accounts/directory?search=` | Hasta 50 personas; proyección mínima y permisos en alcance. |
+| POST | `/api/v1/admin/accounts/guest-access` | `{ guest_id, replace?: false }`; `exists:true` si ya existe, o clave nueva una vez. |
+| PUT | `/api/v1/admin/accounts/guest-invitations` | `{ guest_id, event_id, invited }`, idempotente. |
+
+El intercambio mantiene las reglas de adultos confirmados en Navidad con intercambio habilitado; al participar se exigen regalos. Pasar a pendiente/declinado desactiva participación y conserva sugerencias. La clave de invitado no concede permisos de organización, aunque use el mismo header.
+
+Antes de desplegar el backend, aplicar el parche aditivo `prisma/patches/20261125_guest_profiles.sql` y regenerar Prisma. Añade `AccessAccount.role` (host por defecto) y `guest_id` único, enlazado con `Guest`; las claves siguen guardándose únicamente como hashes SHA-256. No modifica cuentas/claves previas ni el registro público. Aplicado a Neon el 2026-11-25 en el primer intento, sin incidencias. Desplegar ambas capas para habilitar la nueva página y el panel.

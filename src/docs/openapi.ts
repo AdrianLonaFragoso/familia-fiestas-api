@@ -43,12 +43,13 @@ export const openApiDocument = {
     title: "Familia Fiestas API",
     version: "1.0.0",
     description:
-      "API de eventos. Público: inicio reducido, registro y avisos publicados. X-Admin-Key identifica superusuario (ADMIN_API_KEY vigente) o anfitrión con eventos asignados. Solo el superusuario crea, borra y libera eventos y administra cuentas. Familias/directorio ya no son públicos; anfitriones usan /admin/families y /participants con alcance por evento. Invitaciones personales: solo superusuario.",
+      "API de eventos. Público: inicio reducido, registro y avisos publicados. X-Admin-Key identifica superusuario (ADMIN_API_KEY vigente), anfitrión con eventos asignados o invitado vinculado a un único perfil. Solo el superusuario crea, borra y libera eventos y crea anfitriones. Superusuario y anfitriones gestionan accesos e invitaciones de invitados dentro de su alcance. Familias/directorio ya no son públicos; anfitriones usan /admin/families y /participants con alcance por evento. Invitaciones personales: solo superusuario.",
   },
   servers: [{ url: "/api/v1", description: "Servidor actual" }],
   tags: [
     { name: "Público" },
     { name: "Invitaciones" },
+    { name: "Perfil" },
     { name: "Administración" },
   ],
   components: {
@@ -95,6 +96,210 @@ export const openApiDocument = {
     },
   },
   paths: {
+    "/profile/{guestId}": {
+      get: {
+        tags: ["Perfil"],
+        security: adminSecurity,
+        summary: "Perfil propio e invitaciones del invitado autenticado",
+        description:
+          "Solo role guest con guest_id igual al UUID de la ruta. Entrega guest (id, full_name, email, avatar, family_id, is_child), families existentes (id/name), events propios con fecha/hora/sede/anfitriones, asistencia e intercambio y status_options. Sin otros invitados, notas privadas, tokens ni datos organizativos. Cache-Control: no-store.",
+        parameters: [
+          {
+            name: "guestId",
+            in: "path",
+            required: true,
+            schema: { type: "string", format: "uuid" },
+          },
+        ],
+        responses: {
+          "200": okJson("Perfil propio"),
+          "401": errorResponse,
+          "403": errorResponse,
+          "404": errorResponse,
+        },
+      },
+      patch: {
+        tags: ["Perfil"],
+        security: adminSecurity,
+        summary:
+          "Edita nombre, correo, avatar y familia existentes del propio perfil",
+        parameters: [
+          {
+            name: "guestId",
+            in: "path",
+            required: true,
+            schema: { type: "string", format: "uuid" },
+          },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                additionalProperties: false,
+                properties: {
+                  full_name: { type: "string", minLength: 1, maxLength: 120 },
+                  email: {
+                    type: "string",
+                    nullable: true,
+                    maxLength: 160,
+                    description:
+                      "Correo válido, vacío o null. Obligatorio para adultos; se normaliza en Express.",
+                  },
+                  avatar: {
+                    type: "string",
+                    nullable: true,
+                    enum: [...AVATAR_IDS, null],
+                  },
+                  family_id: {
+                    type: "string",
+                    format: "uuid",
+                    nullable: true,
+                    description: "Solo familia existente; null desasigna.",
+                  },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          "200": okJson("Perfil actualizado"),
+          "401": errorResponse,
+          "403": errorResponse,
+          "409": errorResponse,
+          "422": errorResponse,
+        },
+      },
+    },
+    "/profile/{guestId}/events/{eventId}": {
+      patch: {
+        tags: ["Perfil"],
+        security: adminSecurity,
+        summary: "Actualiza asistencia e intercambio de una invitación propia",
+        description:
+          "No permite incorporarse a eventos no invitados (404). Solo adultos confirmados en Navidad con intercambio habilitado pueden participar; regalos obligatorios al participar. Pendiente/declinar desactiva participación conservando regalos. No modifica otros eventos. Responde perfil actualizado, no-store.",
+        parameters: [
+          {
+            name: "guestId",
+            in: "path",
+            required: true,
+            schema: { type: "string", format: "uuid" },
+          },
+          eventIdParam,
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                additionalProperties: false,
+                properties: {
+                  status: { $ref: "#/components/schemas/RsvpStatus" },
+                  participates_in_exchange: { type: "boolean" },
+                  gift_suggestions: {
+                    type: "string",
+                    nullable: true,
+                    maxLength: 500,
+                  },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          "200": okJson("Perfil actualizado"),
+          "401": errorResponse,
+          "403": errorResponse,
+          "404": errorResponse,
+          "422": errorResponse,
+        },
+      },
+    },
+    "/admin/accounts/directory": {
+      get: {
+        tags: ["Administración"],
+        security: adminSecurity,
+        summary:
+          "Busca personas existentes para invitar (superusuario y anfitriones)",
+        description:
+          "Máximo 50. Solo id, full_name, avatar, family_name, invited_event_ids en alcance y can_manage. Sin correo ni estados de eventos ajenos. Un anfitrión puede invitar a una persona a su evento antes de generar su acceso.",
+        parameters: [
+          {
+            name: "search",
+            in: "query",
+            schema: { type: "string", maxLength: 120 },
+          },
+        ],
+        responses: { "200": okJson("Directorio mínimo"), "403": errorResponse },
+      },
+    },
+    "/admin/accounts/guest-access": {
+      post: {
+        tags: ["Administración"],
+        security: adminSecurity,
+        summary:
+          "Genera o reemplaza acceso al perfil de un invitado en alcance",
+        description:
+          "Una cuenta guest por persona. Si ya existe y replace=false devuelve exists:true sin clave. replace=true revoca claves previas y reactiva la cuenta. Clave aleatoria de 256 bits almacenada como hash SHA-256. No envía correos ni WhatsApp.",
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                additionalProperties: false,
+                required: ["guest_id"],
+                properties: {
+                  guest_id: { type: "string", format: "uuid" },
+                  replace: { type: "boolean", default: false },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          "201": okJson("exists; si es nueva: key una vez, guest y account_id"),
+          "403": errorResponse,
+          "404": errorResponse,
+          "422": errorResponse,
+        },
+      },
+    },
+    "/admin/accounts/guest-invitations": {
+      put: {
+        tags: ["Administración"],
+        security: adminSecurity,
+        summary:
+          "Invita o retira una persona existente de un evento en alcance",
+        description:
+          "Idempotente. Invitar crea asistencia pending si falta y conserva la existente. Retirar elimina RSVP/inscripción/intercambio solo de ese evento, conservando persona, cuenta y otras celebraciones. No cambia el formulario de registro público.",
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                additionalProperties: false,
+                required: ["guest_id", "event_id", "invited"],
+                properties: {
+                  guest_id: { type: "string", format: "uuid" },
+                  event_id: { type: "string", format: "uuid" },
+                  invited: { type: "boolean" },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          "200": okJson("ok, guest_id, event_id, invited"),
+          "403": errorResponse,
+          "404": errorResponse,
+          "422": errorResponse,
+        },
+      },
+    },
     "/admin/me": {
       get: {
         tags: ["Administración"],
@@ -110,10 +315,11 @@ export const openApiDocument = {
       get: {
         tags: ["Administración"],
         security: adminSecurity,
-        summary: "Lista cuentas de anfitrión (solo superusuario)",
+        summary:
+          "Lista cuentas: todas para superusuario; invitados propios para anfitrión",
         responses: {
           "200": okJson(
-            "Cuentas con event_ids y prefijos de claves; nunca hashes ni claves completas",
+            "Cuentas con role (host/guest), guest_id, event_ids y prefijos de claves; nunca hashes ni claves completas",
           ),
           "403": errorResponse,
         },
@@ -136,9 +342,9 @@ export const openApiDocument = {
         security: adminSecurity,
         parameters: [idParam],
         summary:
-          "Edita cuenta, activa/desactiva o reemplaza asignaciones (solo superusuario)",
+          "Edita cuenta de anfitrión (superusuario) o activa/desactiva acceso de invitado en alcance",
         description:
-          "Body parcial: name, email, is_active, event_ids. Los cambios se consultan en cada petición.",
+          "Body parcial para anfitrión: name, email, is_active, event_ids. Para cuentas guest solo se permite is_active. Los cambios se consultan en cada petición.",
         responses: {
           "200": okJson("Cuenta sin clave completa"),
           "403": errorResponse,
@@ -150,7 +356,8 @@ export const openApiDocument = {
         tags: ["Administración"],
         security: adminSecurity,
         parameters: [idParam],
-        summary: "Revoca las claves vigentes y genera otra (solo superusuario)",
+        summary:
+          "Revoca las claves vigentes y genera otra (anfitrión solo para invitados propios)",
         responses: {
           "200": okJson("key mostrada una sola vez"),
           "403": errorResponse,
@@ -170,7 +377,8 @@ export const openApiDocument = {
             schema: { type: "string", format: "uuid" },
           },
         ],
-        summary: "Revoca una clave de la cuenta (solo superusuario)",
+        summary:
+          "Revoca una clave de la cuenta (anfitrión solo para invitados propios)",
         responses: { "200": okJson("Clave revocada"), "403": errorResponse },
       },
     },

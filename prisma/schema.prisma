@@ -36,6 +36,7 @@ model Guest {
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
 
   family           Family?                @relation(fields: [familyId], references: [id], onDelete: SetNull)
+  accessAccount    AccessAccount?
   private          GuestPrivate?
   eventGuests      EventGuest[]
   eventHosts       EventHost[]
@@ -252,6 +253,9 @@ model InvitationToken {
 }
 
 model AccessAccount {
+ role String @default("host") @db.VarChar(20)
+ guestId String? @unique @map("guest_id") @db.Uuid
+ guest Guest? @relation(fields:[guestId],references:[id],onDelete:Cascade)
  id String @id @default(uuid()) @db.Uuid
  name String @db.VarChar(120)
  email String? @db.VarChar(160)

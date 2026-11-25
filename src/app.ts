@@ -1,4 +1,5 @@
 import { optionalAdmin } from "./middleware/auth.js";
+import {profileRouter} from "./routes/profile.routes.js";
 import cors from "cors";
 import express from "express";
 import helmet from "helmet";
@@ -58,6 +59,7 @@ export function createApp(): express.Express {
 
   app.use("/api/v1", optionalAdmin);
   app.use("/api/v1", publicRouter);
+  app.use("/api/v1/profile",profileRouter);
   app.use("/api/v1/invitations", invitationRouter);
   app.use("/api/v1/admin", adminRouter);
 

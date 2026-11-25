@@ -6,7 +6,7 @@ import { ANN_CATEGORIES, ANN_PRIORITY, RSVP_LABEL } from "../lib/labels.js";
 import { z } from "zod";
 
 import { parseQuery, validateBody } from "../middleware/validate.js";
-import { requireAdmin } from "../middleware/auth.js";
+import { requireAdmin, requireAuthenticated } from "../middleware/auth.js";
 import {
   activityCreateSchema,
   activityUpdateSchema,
@@ -116,10 +116,10 @@ const tokensQuerySchema = z.object({
 
 export const adminRouter = Router();
 
-adminRouter.use(requireAdmin);
-adminRouter.get("/me", (_req, res) => {
+adminRouter.get("/me", requireAuthenticated, (_req, res) => {
   res.json(identity(res));
 });
+adminRouter.use(requireAdmin);
 adminRouter.use("/accounts", accountsRouter);
 adminRouter.use(scopeAdmin);
 
