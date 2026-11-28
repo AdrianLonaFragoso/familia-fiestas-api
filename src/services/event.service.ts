@@ -280,8 +280,13 @@ export async function setEventGuests(id: string, guestIds: string[]) {
     const count = await tx.guest.count({ where: { id: { in: ids } } });
     if (count !== ids.length) throw unprocessable("Uno o más invitados ya no existen.");
     await tx.eventGuest.deleteMany({ where: { eventId: id, guestId: { notIn: ids } } });
+    const respondedAt = new Date();
     await tx.eventGuest.createMany({
-      data: ids.map((guestId) => ({ eventId: id, guestId })), skipDuplicates: true,
+      data: ids.map((guestId) => ({ eventId: id, guestId, status: "confirmed", respondedAt })), skipDuplicates: true,
+    });
+    await tx.eventGuest.updateMany({
+      where: { eventId: id, guestId: { in: ids }, status: { not: "confirmed" } },
+      data: { status: "confirmed", respondedAt },
     });
     return { ok: true, event_id: id, guests_count: ids.length };
   });

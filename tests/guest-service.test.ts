@@ -37,6 +37,7 @@ function makeTx() {
     },
     eventGuest: {
       createMany: vi.fn().mockResolvedValue({ count: 1 }),
+      updateMany: vi.fn().mockResolvedValue({ count: 1 }),
       deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
     },
   };
@@ -72,7 +73,7 @@ describe("Servicio de invitados (administración)", () => {
       data: expect.objectContaining({ fullName: "María López", email: "maria@example.com" }),
     });
     expect(tx.eventGuest.createMany).toHaveBeenCalledWith({
-      data: [{ eventId, guestId }],
+      data: [{ eventId, guestId, status: "confirmed", respondedAt: expect.any(Date) }],
       skipDuplicates: true,
     });
     expect(result.email).toBe("maria@example.com");

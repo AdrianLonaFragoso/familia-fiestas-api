@@ -274,7 +274,7 @@ export const openApiDocument = {
         summary:
           "Invita o retira una persona existente de un evento en alcance",
         description:
-          "Idempotente. Invitar crea asistencia pending si falta y conserva la existente. Retirar elimina RSVP/inscripción/intercambio solo de ese evento, conservando persona, cuenta y otras celebraciones. No cambia el formulario de registro público.",
+          "Idempotente. Invitar crea o confirma la asistencia, con responded_at si es nueva o cambia de estado; una confirmada conserva su instante y los demás datos. Retirar elimina RSVP/inscripción/intercambio solo de ese evento, conservando persona, cuenta y otras celebraciones. No cambia el formulario de registro público.",
         requestBody: {
           required: true,
           content: {
@@ -792,7 +792,7 @@ export const openApiDocument = {
         summary: "Reemplazar invitados de un evento",
         parameters: [idParam],
         description:
-          "Operación atómica. Conserva RSVP e intercambio de miembros que permanecen. Elimina asistencias/inscripciones de quienes se retiran, sin borrar perfiles ni tocar otros eventos.",
+          "Operación atómica. Confirma las asistencias seleccionadas, conservando el instante de las ya confirmadas y los datos de intercambio. Elimina asistencias/inscripciones de quienes se retiran, sin borrar perfiles ni tocar otros eventos.",
         requestBody: {
           required: true,
           content: {
@@ -931,7 +931,7 @@ export const openApiDocument = {
         security: adminSecurity,
         summary: "Crear invitado",
         description:
-          "`email` es único y opcional. `event_ids` crea las asistencias del invitado en esas celebraciones (estado `pending`).",
+          "`email` es único y opcional. `event_ids` crea las asistencias confirmadas del invitado en esas celebraciones (`confirmed` y `responded_at`).",
         requestBody: {
           required: true,
           content: {
@@ -992,7 +992,7 @@ export const openApiDocument = {
         security: adminSecurity,
         summary: "Editar invitado",
         description:
-          "Acepta los mismos campos que la creación; `avatar` admite la galería de avatares o `null` para quitarlo.",
+          "Acepta los mismos campos que la creación. Enviar event_ids confirma las celebraciones seleccionadas y retira las no seleccionadas, conservando perfil y otros datos; omitirlo no modifica asistencia. `avatar` admite la galería o `null`.",
         parameters: [idParam],
         requestBody: {
           required: true,

@@ -132,12 +132,17 @@ export async function setGuestInvitation(
       }))
     )
       throw notFound("Evento no encontrado.");
-    if (invited)
+    if (invited) {
+      const respondedAt = new Date();
       await tx.eventGuest.createMany({
-        data: [{ guestId, eventId }],
+        data: [{ guestId, eventId, status: "confirmed", respondedAt }],
         skipDuplicates: true,
       });
-    else await tx.eventGuest.deleteMany({ where: { guestId, eventId } });
+      await tx.eventGuest.updateMany({
+        where: { guestId, eventId, status: { not: "confirmed" } },
+        data: { status: "confirmed", respondedAt },
+      });
+    } else await tx.eventGuest.deleteMany({ where: { guestId, eventId } });
   });
   return { ok: true, event_id: eventId, guest_id: guestId, invited };
 }

@@ -110,6 +110,7 @@ export async function createGuest(
 ): Promise<AdminGuest> {
   const prisma = getPrisma();
   const eventIds = input.event_ids ?? [];
+  const respondedAt = new Date();
 
   try {
     const guest = await prisma.$transaction(async (tx) => {
@@ -128,7 +129,7 @@ export async function createGuest(
 
       if (eventIds.length > 0) {
         await tx.eventGuest.createMany({
-          data: eventIds.map((eventId) => ({ eventId, guestId: created.id })),
+          data: eventIds.map((eventId) => ({ eventId, guestId: created.id, status: "confirmed", respondedAt })),
           skipDuplicates: true,
         });
       }
@@ -178,13 +179,18 @@ export async function updateGuest(
       });
 
       if (input.event_ids !== undefined) {
+        const respondedAt = new Date();
         await tx.eventGuest.deleteMany({
           where: { guestId: id, eventId: { notIn: input.event_ids } },
         });
         if (input.event_ids.length > 0) {
           await tx.eventGuest.createMany({
-            data: input.event_ids.map((eventId) => ({ eventId, guestId: id })),
+            data: input.event_ids.map((eventId) => ({ eventId, guestId: id, status: "confirmed", respondedAt })),
             skipDuplicates: true,
+          });
+          await tx.eventGuest.updateMany({
+            where: { guestId: id, eventId: { in: input.event_ids }, status: { not: "confirmed" } },
+            data: { status: "confirmed", respondedAt },
           });
         }
       }
