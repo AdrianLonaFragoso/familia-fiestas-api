@@ -180,6 +180,8 @@ export type Guest = {
 };
 
 export type AdminGuest = Guest & {
+  gender: "male" | "female" | null;
+  gender_label: string;
   email: string | null;
   event_statuses: {
     id: string;

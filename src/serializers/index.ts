@@ -1,3 +1,4 @@
+import { GUEST_GENDER_LABEL } from "../lib/labels.js";
 import {
   calendarInfo,
   dateOnly,
@@ -25,7 +26,10 @@ import {
   responsibilityStatusLabel,
   rsvpLabel,
 } from "../lib/labels.js";
-import { hasGiftExchange, registrationExchangeEnabled } from "../lib/event-rules.js";
+import {
+  hasGiftExchange,
+  registrationExchangeEnabled,
+} from "../lib/event-rules.js";
 import type {
   Activity,
   AdminGuest,
@@ -102,7 +106,10 @@ export function mapVenue(venue: VenueRecord): Venue {
   };
 }
 
-export function mapEvent(event: EventRecord, venue: VenueRecord | null): EventRow {
+export function mapEvent(
+  event: EventRecord,
+  venue: VenueRecord | null,
+): EventRow {
   const eventDate = dateOnly(event.eventDate);
   const arrivalTime = timeOnly(event.arrivalTime);
   const startTime = timeOnly(event.startTime);
@@ -237,7 +244,9 @@ export function mapMenu(item: MenuRecord): MenuItem {
     status_label: menuStatusLabel(item.status),
     notes: item.notes,
     created_at: isoRequired(item.createdAt),
-    menu_item_assignees: item.assignees.map((assignee) => ({ guest_id: assignee.guestId })),
+    menu_item_assignees: item.assignees.map((assignee) => ({
+      guest_id: assignee.guestId,
+    })),
   };
 }
 
@@ -391,7 +400,12 @@ export function mapGuest(guest: GuestRecord): Guest {
 }
 
 export function countStatuses(rows: { status: string }[]): AttendanceCounts {
-  const counts: AttendanceCounts = { total: rows.length, confirmed: 0, pending: 0, declined: 0 };
+  const counts: AttendanceCounts = {
+    total: rows.length,
+    confirmed: 0,
+    pending: 0,
+    declined: 0,
+  };
   for (const row of rows) {
     if (row.status === "confirmed") counts.confirmed++;
     else if (row.status === "declined") counts.declined++;
@@ -430,9 +444,9 @@ export function nextEventId(
   return null;
 }
 
-export function sortAnnouncements<T extends { priority: string; published_at: string }>(
-  list: T[],
-): T[] {
+export function sortAnnouncements<
+  T extends { priority: string; published_at: string },
+>(list: T[]): T[] {
   return [...list].sort(
     (a, b) =>
       (PRIORITY_RANK[a.priority] ?? 3) - (PRIORITY_RANK[b.priority] ?? 3) ||
@@ -440,16 +454,28 @@ export function sortAnnouncements<T extends { priority: string; published_at: st
   );
 }
 
-export function featuredAnnouncements<T extends { priority: string; published_at: string }>(
-  list: T[],
-): T[] {
+export function featuredAnnouncements<
+  T extends { priority: string; published_at: string },
+>(list: T[]): T[] {
   const sorted = sortAnnouncements(list);
-  const highlighted = sorted.filter((announcement) => announcement.priority !== "normal");
-  return (highlighted.length ? highlighted : sorted).slice(0, highlighted.length ? 4 : 3);
+  const highlighted = sorted.filter(
+    (announcement) => announcement.priority !== "normal",
+  );
+  return (highlighted.length ? highlighted : sorted).slice(
+    0,
+    highlighted.length ? 4 : 3,
+  );
 }
 
 export type EventGuestWithEventRecord = EventGuestRecord & {
-  event: { id: string; slug: string; name: string; eventDate: DateLike; startTime: DateLike | null; arrivalTime: DateLike | null };
+  event: {
+    id: string;
+    slug: string;
+    name: string;
+    eventDate: DateLike;
+    startTime: DateLike | null;
+    arrivalTime: DateLike | null;
+  };
 };
 
 export function mapParticipant(
@@ -517,6 +543,7 @@ export function mapRegistration(row: RegistrationRecord): Registration {
 }
 
 export type AdminGuestRecord = GuestRecord & {
+  gender?: string | null;
   private?: {
     dietaryNotes: string | null;
     adminNotes: string | null;
@@ -534,6 +561,11 @@ export type AdminGuestRecord = GuestRecord & {
 export function mapAdminGuest(guest: AdminGuestRecord): AdminGuest {
   return {
     ...mapGuest(guest),
+    gender:
+      guest.gender === "male" || guest.gender === "female"
+        ? guest.gender
+        : null,
+    gender_label: GUEST_GENDER_LABEL[guest.gender ?? ""] ?? "Sin especificar",
     email: guest.email ?? null,
     event_statuses: (guest.eventGuests ?? []).map((eventGuest) => ({
       id: eventGuest.id,
@@ -675,8 +707,10 @@ export function mapInvitation(record: InvitationRecord): Invitation {
 }
 
 export function eventStartLabel(event: EventRecord): string {
-  return formatTime(eventStartTime({
-    arrival_time: timeOnly(event.arrivalTime),
-    start_time: timeOnly(event.startTime),
-  }));
+  return formatTime(
+    eventStartTime({
+      arrival_time: timeOnly(event.arrivalTime),
+      start_time: timeOnly(event.startTime),
+    }),
+  );
 }

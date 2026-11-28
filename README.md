@@ -258,3 +258,12 @@ API Express (requiere clave; respuestas privadas `no-store`):
 El intercambio mantiene las reglas de adultos confirmados en Navidad con intercambio habilitado; al participar se exigen regalos. Pasar a pendiente/declinado desactiva participación y conserva sugerencias. La clave de invitado no concede permisos de organización, aunque use el mismo header.
 
 Antes de desplegar el backend, aplicar el parche aditivo `prisma/patches/20261125_guest_profiles.sql` y regenerar Prisma. Añade `AccessAccount.role` (host por defecto) y `guest_id` único, enlazado con `Guest`; las claves siguen guardándose únicamente como hashes SHA-256. No modifica cuentas/claves previas ni el registro público. Aplicado a Neon el 2026-11-25 en el primer intento, sin incidencias. Desplegar ambas capas para habilitar la nueva página y el panel.
+
+
+## Filtros de invitados y Hombre/Mujer (2026-11-27)
+
+En `/admin` → **Invitados**, los filtros de nombre/correo, familia, evento y asistencia se combinan. Para ver confirmados de una celebración, selecciona el evento y **Confirmado**. Sin evento, el estado busca en cualquiera de los eventos autorizados; evento y estado siempre deben coincidir en la misma asistencia. Los filtros se resuelven en Express (`GET /api/v1/admin/guests?event_id=<uuid>&status=confirmed`); también se admiten `pending` y `declined`. Los anfitriones solo consultan sus eventos, incluidos los no liberados.
+
+El formulario administrativo de alta/edición incorpora **Hombre / Mujer**: `gender` admite `male`, `female` o null (**Sin especificar**). Omitir el campo al editar conserva su valor; null lo limpia. Los registros actuales permanecen sin especificar; no se deduce del nombre. Se devuelve `gender` y `gender_label` solo en la respuesta administrativa del invitado. `/admin/options` añade `guest_genders`. Editan superusuario y anfitriones con los permisos actuales sobre perfiles; los perfiles compartidos conservan la restricción de superusuario. Público, registro y perfil personal no editan ni reciben este campo.
+
+El esquema requiere el parche aditivo e idempotente del backend `prisma/patches/20261127_guest_gender.sql` y regenerar Prisma. Agrega columna nullable con restricción de valores; no ejecuta seed ni cambia asistencias. Aplicado en Neon el 2026-11-27 en el primer intento, sin incidencias.

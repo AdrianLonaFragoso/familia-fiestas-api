@@ -31,6 +31,7 @@ model Guest {
   fullName  String   @map("full_name") @db.VarChar(120)
   email     String?  @unique @db.VarChar(160)
   avatar    String?  @db.VarChar(20)
+  gender    String?  @db.VarChar(10)
   familyId  String?  @map("family_id") @db.Uuid
   tag       String?  @db.VarChar(40)
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)

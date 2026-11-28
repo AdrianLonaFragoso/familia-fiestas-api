@@ -726,7 +726,7 @@ export const openApiDocument = {
         security: adminSecurity,
         summary: "Opciones y etiquetas para los formularios administrativos",
         responses: {
-          "200": okJson("Categorías, prioridades y estados RSVP"),
+          "200": okJson("Categorías, prioridades, estados RSVP y guest_genders (Hombre/Mujer)"),
           "401": errorResponse,
         },
       },
@@ -899,14 +899,30 @@ export const openApiDocument = {
       get: {
         tags: ["Administración"],
         security: adminSecurity,
-        summary: "Listar invitados con datos privados",
+        summary: "Listar invitados con datos administrativos",
+        description:
+          "Combina family_id, search, event_id y status. El estado debe coincidir en la misma asistencia del evento elegido; sin evento busca en cualquiera del alcance de la cuenta. Anfitriones no pueden consultar eventos ajenos. Devuelve gender (male/female/null) y gender_label solo en administración.",
         parameters: [
           {
             name: "family_id",
             in: "query",
             schema: { type: "string", format: "uuid" },
           },
-          { name: "search", in: "query", schema: { type: "string" } },
+          {
+            name: "search",
+            in: "query",
+            schema: { type: "string", maxLength: 120 },
+          },
+          {
+            name: "event_id",
+            in: "query",
+            schema: { type: "string", format: "uuid" },
+          },
+          {
+            name: "status",
+            in: "query",
+            schema: { $ref: "#/components/schemas/RsvpStatus" },
+          },
         ],
         responses: { "200": okJson("Invitados") },
       },
@@ -937,6 +953,13 @@ export const openApiDocument = {
                     enum: [...AVATAR_IDS, null],
                   },
                   family_id: { type: "string", format: "uuid", nullable: true },
+                  gender: {
+                    type: "string",
+                    enum: ["male", "female", null],
+                    nullable: true,
+                    description:
+                      "Hombre/Mujer. null: Sin especificar. Solo organizadores en alcance; omitido conserva el valor al editar. No inferir por nombre.",
+                  },
                   tag: { type: "string", nullable: true, maxLength: 40 },
                   event_ids: {
                     type: "array",
@@ -991,6 +1014,13 @@ export const openApiDocument = {
                     enum: [...AVATAR_IDS, null],
                   },
                   family_id: { type: "string", format: "uuid", nullable: true },
+                  gender: {
+                    type: "string",
+                    enum: ["male", "female", null],
+                    nullable: true,
+                    description:
+                      "Hombre/Mujer. null: Sin especificar. Solo organizadores en alcance; omitido conserva el valor al editar. No inferir por nombre.",
+                  },
                   tag: { type: "string", nullable: true, maxLength: 40 },
                   event_ids: {
                     type: "array",

@@ -36,19 +36,48 @@ const guestInclude = {
   invitationTokens: { orderBy: { createdAt: "desc" as const } },
 };
 
-export async function listGuests(filters: {
-  family_id?: string | undefined;
-  search?: string | undefined;
-}): Promise<AdminGuest[]> {
+export async function listGuests(
+  filters: {
+    family_id?: string | undefined;
+    search?: string | undefined;
+    event_id?: string | undefined;
+    status?: "pending" | "confirmed" | "declined" | undefined;
+  },
+  allowedEventIds?: string[],
+): Promise<AdminGuest[]> {
   const prisma = getPrisma();
   const rows = await prisma.guest.findMany({
     where: {
+      ...(filters.event_id || filters.status || allowedEventIds !== undefined
+        ? {
+            eventGuests: {
+              some: {
+                ...(filters.event_id
+                  ? { eventId: filters.event_id }
+                  : allowedEventIds !== undefined
+                    ? { eventId: { in: allowedEventIds } }
+                    : {}),
+                ...(filters.status ? { status: filters.status } : {}),
+              },
+            },
+          }
+        : {}),
       ...(filters.family_id ? { familyId: filters.family_id } : {}),
       ...(filters.search
         ? {
             OR: [
-              { fullName: { contains: filters.search, mode: "insensitive" as const } },
-              { email: { contains: filters.search, mode: "insensitive" as const } },
+              {
+                fullName: {
+                  contains: filters.search,
+                  mode: "insensitive" as const,
+                },
+              },
+              {
+                email: {
+                  contains: filters.search,
+                  mode: "insensitive" as const,
+                },
+              },
             ],
           }
         : {}),
@@ -61,7 +90,10 @@ export async function listGuests(filters: {
 
 export async function getGuest(id: string): Promise<AdminGuest> {
   const prisma = getPrisma();
-  const guest = await prisma.guest.findUnique({ where: { id }, include: guestInclude });
+  const guest = await prisma.guest.findUnique({
+    where: { id },
+    include: guestInclude,
+  });
   if (!guest) throw notFound("Invitado no encontrado.");
   return mapAdminGuest(guest);
 }
@@ -73,7 +105,9 @@ function rethrowUnique(error: unknown): never {
   throw error;
 }
 
-export async function createGuest(input: GuestCreateInput): Promise<AdminGuest> {
+export async function createGuest(
+  input: GuestCreateInput,
+): Promise<AdminGuest> {
   const prisma = getPrisma();
   const eventIds = input.event_ids ?? [];
 
@@ -84,7 +118,10 @@ export async function createGuest(input: GuestCreateInput): Promise<AdminGuest> 
           fullName: input.full_name,
           email: input.email ? normalizeEmail(input.email) : null,
           avatar: input.avatar ?? null,
-          ...(input.family_id ? { family: { connect: { id: input.family_id } } } : {}),
+          gender: input.gender ?? null,
+          ...(input.family_id
+            ? { family: { connect: { id: input.family_id } } }
+            : {}),
           tag: input.tag ?? null,
         },
       });
@@ -96,7 +133,10 @@ export async function createGuest(input: GuestCreateInput): Promise<AdminGuest> 
         });
       }
 
-      return tx.guest.findUniqueOrThrow({ where: { id: created.id }, include: guestInclude });
+      return tx.guest.findUniqueOrThrow({
+        where: { id: created.id },
+        include: guestInclude,
+      });
     });
     return mapAdminGuest(guest);
   } catch (error) {
@@ -104,9 +144,15 @@ export async function createGuest(input: GuestCreateInput): Promise<AdminGuest> 
   }
 }
 
-export async function updateGuest(id: string, input: GuestUpdateInput): Promise<AdminGuest> {
+export async function updateGuest(
+  id: string,
+  input: GuestUpdateInput,
+): Promise<AdminGuest> {
   const prisma = getPrisma();
-  const current = await prisma.guest.findUnique({ where: { id }, select: { id: true } });
+  const current = await prisma.guest.findUnique({
+    where: { id },
+    select: { id: true },
+  });
   if (!current) throw notFound("Invitado no encontrado.");
 
   try {
@@ -119,6 +165,7 @@ export async function updateGuest(id: string, input: GuestUpdateInput): Promise<
             ? { email: input.email ? normalizeEmail(input.email) : null }
             : {}),
           ...(input.avatar !== undefined ? { avatar: input.avatar } : {}),
+          ...(input.gender !== undefined ? { gender: input.gender } : {}),
           ...(input.tag !== undefined ? { tag: input.tag } : {}),
           ...(input.family_id !== undefined
             ? {
@@ -142,7 +189,10 @@ export async function updateGuest(id: string, input: GuestUpdateInput): Promise<
         }
       }
 
-      return tx.guest.findUniqueOrThrow({ where: { id }, include: guestInclude });
+      return tx.guest.findUniqueOrThrow({
+        where: { id },
+        include: guestInclude,
+      });
     });
     return mapAdminGuest(guest);
   } catch (error) {
@@ -152,14 +202,20 @@ export async function updateGuest(id: string, input: GuestUpdateInput): Promise<
 
 export async function deleteGuest(id: string): Promise<void> {
   const prisma = getPrisma();
-  const current = await prisma.guest.findUnique({ where: { id }, select: { id: true } });
+  const current = await prisma.guest.findUnique({
+    where: { id },
+    select: { id: true },
+  });
   if (!current) throw notFound("Invitado no encontrado.");
   await prisma.guest.delete({ where: { id } });
 }
 
 export async function upsertGuestPrivate(id: string, input: GuestPrivateInput) {
   const prisma = getPrisma();
-  const guest = await prisma.guest.findUnique({ where: { id }, select: { id: true } });
+  const guest = await prisma.guest.findUnique({
+    where: { id },
+    select: { id: true },
+  });
   if (!guest) throw notFound("Invitado no encontrado.");
 
   const result = await prisma.guestPrivate.upsert({
@@ -185,7 +241,9 @@ export async function upsertGuestPrivate(id: string, input: GuestPrivateInput) {
   };
 }
 
-export async function listEventGuests(filters: { event_id?: string | undefined }) {
+export async function listEventGuests(filters: {
+  event_id?: string | undefined;
+}) {
   const prisma = getPrisma();
   const rows = await prisma.eventGuest.findMany({
     where: filters.event_id ? { eventId: filters.event_id } : {},
@@ -220,7 +278,10 @@ export async function listEventGuests(filters: { event_id?: string | undefined }
   }));
 }
 
-export async function updateEventGuest(id: string, input: EventGuestUpdateInput) {
+export async function updateEventGuest(
+  id: string,
+  input: EventGuestUpdateInput,
+) {
   const prisma = getPrisma();
   const current = await prisma.eventGuest.findUnique({
     where: { id },
@@ -271,7 +332,11 @@ export async function updateEventGuest(id: string, input: EventGuestUpdateInput)
         ? { respondedAt: new Date() }
         : {}),
       ...(input.responded_at !== undefined
-        ? { respondedAt: input.responded_at ? new Date(input.responded_at) : null }
+        ? {
+            respondedAt: input.responded_at
+              ? new Date(input.responded_at)
+              : null,
+          }
         : {}),
     },
   });

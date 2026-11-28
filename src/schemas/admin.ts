@@ -63,6 +63,13 @@ export const familyCreateSchema = z.object({
 });
 export const familyUpdateSchema = familyCreateSchema.partial();
 
+export const guestsQuerySchema = z.object({
+  family_id: uuidSchema.optional(),
+  search: z.string().trim().min(1).max(120).optional(),
+  event_id: uuidSchema.optional(),
+  status: rsvpStatusSchema.optional(),
+});
+
 export const guestCreateSchema = z.object({
   full_name: shortText,
   email: z
@@ -74,6 +81,7 @@ export const guestCreateSchema = z.object({
     .nullable()
     .optional(),
   avatar: avatarSchema,
+  gender: z.enum(["male", "female"]).nullable().optional(),
   family_id: optionalUuid,
   tag: z.string().max(40).nullable().optional(),
   event_ids: z.array(uuidSchema).optional(),

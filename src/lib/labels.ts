@@ -1,5 +1,12 @@
 import type { RsvpStatus } from "../types.js";
 
+export const GUEST_GENDERS = [
+  ["male", "Hombre"],
+  ["female", "Mujer"],
+] as const;
+export const GUEST_GENDER_LABEL: Record<string, string> =
+  Object.fromEntries(GUEST_GENDERS);
+
 export const RSVP_LABEL: Record<RsvpStatus, string> = {
   confirmed: "Confirmado",
   pending: "Pendiente de confirmar",

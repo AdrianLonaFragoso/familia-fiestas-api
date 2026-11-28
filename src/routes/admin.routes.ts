@@ -2,7 +2,12 @@ import { scopeAdmin } from "../middleware/scope.js";
 import { accountsRouter } from "./accounts.routes.js";
 import { identity } from "../middleware/auth.js";
 import { Router } from "express";
-import { ANN_CATEGORIES, ANN_PRIORITY, RSVP_LABEL } from "../lib/labels.js";
+import {
+  ANN_CATEGORIES,
+  ANN_PRIORITY,
+  RSVP_LABEL,
+  GUEST_GENDERS,
+} from "../lib/labels.js";
 import { z } from "zod";
 
 import { parseQuery, validateBody } from "../middleware/validate.js";
@@ -19,6 +24,7 @@ import {
   familyCreateSchema,
   familyUpdateSchema,
   guestCreateSchema,
+  guestsQuerySchema,
   guestPrivateSchema,
   guestUpdateSchema,
   hostCreateSchema,
@@ -31,10 +37,7 @@ import {
   venueCreateSchema,
   venueUpdateSchema,
 } from "../schemas/admin.js";
-import {
-  announcementsQuerySchema,
-  participantsQuerySchema,
-} from "../schemas/public.js";
+import { announcementsQuerySchema } from "../schemas/public.js";
 import { registrationsQuerySchema } from "../schemas/registration.js";
 import { uuidSchema } from "../schemas/common.js";
 import {
@@ -133,6 +136,7 @@ adminRouter.get("/options", (_req, res) => {
       value,
       label,
     })),
+    guest_genders: GUEST_GENDERS.map(([value, label]) => ({ value, label })),
     rsvp_statuses: Object.entries(RSVP_LABEL).map(([value, label]) => ({
       value,
       label,
@@ -219,8 +223,14 @@ adminRouter.delete("/families/:id", async (req, res) => {
 
 // Invitados
 adminRouter.get("/guests", async (req, res) => {
-  const query = parseQuery(participantsQuerySchema, req.query);
-  res.json(await listGuests(query));
+  const query = parseQuery(guestsQuerySchema, req.query);
+  const actor = identity(res);
+  res.json(
+    await listGuests(
+      query,
+      actor.role === "superuser" ? undefined : actor.event_ids,
+    ),
+  );
 });
 adminRouter.get("/guests/:id", async (req, res) => {
   res.json(await getGuest(String(req.params.id)));
