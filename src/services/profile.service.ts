@@ -1,3 +1,4 @@
+import { ownExchangeResults } from "./exchange.service.js";
 import { getPrisma } from "../db/prisma.js";
 import { conflict, notFound, unprocessable } from "../lib/http-error.js";
 import {
@@ -48,6 +49,7 @@ export async function getProfile(guestId: string) {
       orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
     }),
   ]);
+  const exchangeResults = await ownExchangeResults(guestId);
   return {
     guest: {
       id: guest.id,
@@ -58,6 +60,7 @@ export async function getProfile(guestId: string) {
       is_child: isChildGuest(guest),
     },
     families,
+    exchange_results: exchangeResults,
     events: rows.map((row) => ({
       id: row.event.id,
       name: row.event.name,
@@ -70,6 +73,9 @@ export async function getProfile(guestId: string) {
       hosts: row.event.hosts.map((h) => h.name),
       status: row.status,
       status_label: RSVP_LABEL[row.status as keyof typeof RSVP_LABEL],
+      exchange_locked: exchangeResults.some(
+        (result) => result.event_id === row.event.id,
+      ),
       exchange_enabled:
         registrationExchangeEnabled(row.event) && !isChildGuest(guest),
       participates_in_exchange: row.participatesInExchange,

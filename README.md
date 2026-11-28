@@ -192,7 +192,7 @@ Las pruebas cubren estado del servicio, OpenAPI, autenticación de administraci�
 
 ## Configuración de eventos
 
-Los eventos aceptan `gift_exchange_enabled` (boolean; `false` al crear). Este campo controla la disponibilidad del intercambio del evento; el registro familiar público añade la restricción de adultos y Navidad el 24 de diciembre. Desactivarlo conserva las participaciones y regalos existentes; el sorteo sigue pendiente.
+Los eventos aceptan `gift_exchange_enabled` (boolean; `false` al crear). Este campo controla la disponibilidad del intercambio del evento; el registro familiar público añade la restricción de adultos y Navidad el 24 de diciembre. Desactivarlo conserva las participaciones y regalos existentes; un sorteo publicado impide desactivarlo o alterar sus participantes.
 
 `PUT /api/v1/admin/events/:id/guests` con `{ "guest_ids": ["<uuid>"] }` reemplaza la lista de un evento en una transacción. Confirma a los asistentes seleccionados, conserva los datos de intercambio y el instante de quienes ya estaban confirmados, y no modifica otras celebraciones. Los retirados pierden la asistencia/inscripción y datos de intercambio de ese evento; el perfil del invitado se conserva. Requiere `X-Admin-Key`.
 
@@ -274,3 +274,22 @@ El esquema requiere el parche aditivo e idempotente del backend `prisma/patches/
 La tabla de `/admin` → **Invitados** muestra **Celebraciones** como etiquetas, sin selectores de estado ni filtro de asistencia. Conserva búsqueda, familia, evento, datos personales e intercambio. La asistencia se gestiona desde **Editar invitado**: al guardar las casillas seleccionadas quedan en `confirmed`; desmarcar elimina la relación RSVP/inscripción/intercambio solo de ese evento. La persona y las demás celebraciones permanecen.
 
 Express aplica el mismo criterio en alta/edición de invitados (`event_ids`), selección de invitados de un evento y casilla de invitación en **Usuarios y accesos**. Las asistencias nuevas y las pendientes/declinadas seleccionadas se confirman con `responded_at`; una ya confirmada conserva ese instante, regalos y demás datos. Omitir `event_ids` al editar no cambia las asistencias. `registered_at` mantiene su significado de inscripción pública. El registro público ya confirmaba y no cambia; tampoco se cambia el perfil personal ni se retiran estados de la API. No requiere migración ni actualiza masivamente registros existentes: aplica al guardar una selección administrativa.
+
+
+## Sorteo y correo del intercambio
+
+Solo el superusuario organiza, consulta las asignaciones completas y envía resultados. `/admin` → **Sorteo** revisa adultos que optaron por Navidad, confirmados, con correos válidos únicos y regalos. Ningún participante inválido se excluye silenciosamente: hay que corregir todos antes de sortear. Cada persona da y recibe una vez, nunca a sí misma; no hay restricciones por familia, pareja o género.
+
+1. **Sortear** guarda un borrador aleatorio; **Volver a sortear** lo reemplaza antes de enviar.
+2. La página separada `/sorteo/:drawId/revision` muestra destinatarios, regalos con enlaces seguros y vista previa de cada correo.
+3. **Enviar todos los resultados** exige confirmación manual, vuelve a validar la revisión/datos y publica los resultados en los perfiles. Desde este momento se bloquean las asignaciones y la incorporación, retirada o cambio de asistencia/participación de los miembros, incluso si falla algún envío. No se borran participantes ni el evento mientras esté bloqueado.
+4. El navegador solicita un correo por petición y espera a Gmail. No hay cron ni envíos al cargar una página. Si cierras la revisión, reábrela y pulsa **Continuar / comprobar envíos**. Los enviados no se repiten. Se conserva el avance en PostgreSQL.
+5. Un fallo confirmado permite reintento con la misma asignación. Una interrupción incierta requiere comprobar **Enviados** en Gmail: marcar como enviado si aparece o reintentar si no aparece. Un reclamo interrumpido pasa a revisión incierta a los tres minutos al comprobar el lote. La aceptación SMTP no garantiza entrega en la bandeja del destinatario.
+
+Cada correo usa una plantilla HTML con tablas y estilos inline compatible con Gmail, logo absoluto de producción, versión de texto, nombre asignado, regalos enlazados y bases. No contiene claves ni resultados de otros remitentes. El perfil solo entrega la asignación propia publicada. Nombres/correos/regalos y bases se guardan como instantánea; editar datos personales o sugerencias después no cambia lo sorteado ni el correo.
+
+En el backend configura `SMTP_USER` (cuenta Gmail), `SMTP_APP_PASSWORD` (contraseña de aplicación de esa cuenta, sin espacios) y `FRONTEND_URL` (origen del frontend; por defecto producción). Nunca en variables `VITE_*` ni en git. Configurar también las variables en el proyecto backend de Vercel; se aplican al siguiente despliegue. Nodemailer usa TLS y `verify()` comprueba autenticación sin enviar mensajes; referencia: [transporte SMTP](https://nodemailer.com/smtp). Gmail puede limitar o rechazar envíos; el panel conserva los fallos sin repetir asignaciones.
+
+**Antes de desplegar** aplicar `prisma/patches/20261127_exchange_draws.sql` y ejecutar `pnpm db:generate`. El parche aditivo e idempotente crea `exchange_draws`, `exchange_assignments` y triggers de bloqueo transaccional; no ejecuta seed ni modifica invitados/asistencias existentes. `db:push` por sí solo no instala los triggers. Validado en PostgreSQL temporal y aplicado a Neon el 2026-11-27, tras autorización del usuario; se confirmó con lectura de tablas y triggers. Sin sorteos ni envíos reales.
+
+Endpoints Express bajo `/api/v1/admin/exchange`: `GET /events/:eventId`, `POST /events/:eventId/draw`, `GET /:id`, `POST /:id/start`, `POST /:id/send-next`, `POST /:id/mail/:assignmentId`. Requieren `X-Admin-Key` de superusuario y usan `Cache-Control: no-store`. Contrato y errores en [Swagger](/api/docs). El envío y las revisiones usan controles de concurrencia para no sobrescribir otra pestaña ni reclamar dos veces el mismo correo.

@@ -1,3 +1,4 @@
+import { exchangeRouter } from "./exchange.routes.js";
 import { scopeAdmin } from "../middleware/scope.js";
 import { accountsRouter } from "./accounts.routes.js";
 import { identity } from "../middleware/auth.js";
@@ -124,6 +125,7 @@ adminRouter.get("/me", requireAuthenticated, (_req, res) => {
 });
 adminRouter.use(requireAdmin);
 adminRouter.use("/accounts", accountsRouter);
+adminRouter.use("/exchange", exchangeRouter);
 adminRouter.use(scopeAdmin);
 
 adminRouter.get("/options", (_req, res) => {

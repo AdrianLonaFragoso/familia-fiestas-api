@@ -37,6 +37,8 @@ model Guest {
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
 
   family           Family?                @relation(fields: [familyId], references: [id], onDelete: SetNull)
+  exchangeGiven ExchangeAssignment[] @relation("ExchangeGiver")
+  exchangeReceived ExchangeAssignment[] @relation("ExchangeRecipient")
   accessAccount    AccessAccount?
   private          GuestPrivate?
   eventGuests      EventGuest[]
@@ -101,6 +103,7 @@ model Event {
   venueId             String?   @map("venue_id") @db.Uuid
   updatedAt           DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
+  exchangeDraw ExchangeDraw?
   accessAssignments AccountEvent[]
   venue            Venue?           @relation(fields: [venueId], references: [id], onDelete: SetNull)
   guests           EventGuest[]
@@ -285,4 +288,46 @@ model AccountEvent {
  @@id([accountId,eventId])
  @@index([eventId])
  @@map("account_events")
+}
+
+model ExchangeDraw {
+  id String @id @default(uuid()) @db.Uuid
+  eventId String @unique @map("event_id") @db.Uuid
+  revision Int @default(1)
+  snapshotHash String @map("snapshot_hash") @db.VarChar(64)
+  eventName String @map("event_name")
+  eventDate DateTime @map("event_date") @db.Date
+  exchangeRules String? @map("exchange_rules")
+  sortedBy String @map("sorted_by") @db.VarChar(120)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  lockedAt DateTime? @map("locked_at") @db.Timestamptz(6)
+  event Event @relation(fields:[eventId], references:[id], onDelete:Cascade)
+  assignments ExchangeAssignment[]
+  @@map("exchange_draws")
+}
+
+model ExchangeAssignment {
+  id String @id @default(uuid()) @db.Uuid
+  drawId String @map("draw_id") @db.Uuid
+  giverId String? @map("giver_id") @db.Uuid
+  recipientId String? @map("recipient_id") @db.Uuid
+  giverName String @map("giver_name") @db.VarChar(120)
+  giverEmail String @map("giver_email") @db.VarChar(160)
+  recipientName String @map("recipient_name") @db.VarChar(120)
+  giftSuggestions String @map("gift_suggestions") @db.VarChar(500)
+  position Int
+  status String @default("pending") @db.VarChar(20)
+  attempts Int @default(0)
+  attemptedAt DateTime? @map("attempted_at") @db.Timestamptz(6)
+  sentAt DateTime? @map("sent_at") @db.Timestamptz(6)
+  lastError String? @map("last_error") @db.VarChar(500)
+  messageId String? @map("message_id") @db.VarChar(255)
+  draw ExchangeDraw @relation(fields:[drawId], references:[id], onDelete:Cascade)
+  giver Guest? @relation("ExchangeGiver", fields:[giverId], references:[id], onDelete:SetNull)
+  recipient Guest? @relation("ExchangeRecipient", fields:[recipientId], references:[id], onDelete:SetNull)
+  @@unique([drawId,giverId])
+  @@unique([drawId,recipientId])
+  @@index([giverId])
+  @@map("exchange_assignments")
 }

@@ -37,6 +37,19 @@ const okJson = (description: string) => ({
   content: { "application/json": { schema: { type: "object" } } },
 });
 
+const revisionBody = {
+  required: true,
+  content: {
+    "application/json": {
+      schema: {
+        type: "object",
+        additionalProperties: false,
+        required: ["revision"],
+        properties: { revision: { type: "integer", minimum: 0 } },
+      },
+    },
+  },
+};
 export const openApiDocument = {
   openapi: "3.0.3",
   info: {
@@ -50,6 +63,7 @@ export const openApiDocument = {
     { name: "Público" },
     { name: "Invitaciones" },
     { name: "Perfil" },
+    { name: "Sorteo" },
     { name: "Administración" },
   ],
   components: {
@@ -96,13 +110,132 @@ export const openApiDocument = {
     },
   },
   paths: {
+    "/admin/exchange/events/{eventId}": {
+      get: {
+        tags: ["Sorteo"],
+        security: adminSecurity,
+        summary: "Elegibilidad y borrador del intercambio (solo superusuario)",
+        description:
+          "Participantes que optaron por el intercambio; bloquea sortear si hay menos de dos, menores, asistencia no confirmada, correo ausente/inválido/repetido o regalos vacíos. Solo Navidad el 24 de diciembre con intercambio habilitado. Devuelve participants, issues, can_sort, mail_configured y draw opcional. Sin envíos automáticos.",
+        parameters: [eventIdParam],
+        responses: {
+          "200": okJson("Elegibilidad y sorteo actual"),
+          "401": errorResponse,
+          "403": errorResponse,
+        },
+      },
+    },
+    "/admin/exchange/events/{eventId}/draw": {
+      post: {
+        tags: ["Sorteo"],
+        security: adminSecurity,
+        summary: "Crear o repetir borrador aleatorio (solo superusuario)",
+        description:
+          "Cuerpo estricto {revision: entero >= 0}; 0 al crear, revisión actual al repetir. Cada persona da y recibe exactamente un regalo, nunca a sí misma. Sin exclusiones de familia/pareja/género. Reemplaza las asignaciones e incrementa revisión; no envía correo. 409 si otra pestaña lo cambió o ya está publicado; 422 si faltan datos.",
+        parameters: [eventIdParam],
+        requestBody: revisionBody,
+        responses: {
+          "201": okJson("Sorteo con asignaciones y vista previa"),
+          "403": errorResponse,
+          "409": errorResponse,
+          "422": errorResponse,
+        },
+      },
+    },
+    "/admin/exchange/{id}": {
+      get: {
+        tags: ["Sorteo"],
+        security: adminSecurity,
+        summary: "Revisión final privada (solo superusuario)",
+        description:
+          "Devuelve revision, sorted_by, updated_at, locked_at, stale, mail_configured, state (draft/sending/completed), counts por estado y assignments con giver_name/email, recipient_name, gift_suggestions, gift_html escapado, status, attempts, sent_at, last_error sanitizado y preview {subject,text,html}. Sin efectos ni envíos.",
+        parameters: [idParam],
+        responses: {
+          "200": okJson("Sorteo y asignaciones"),
+          "403": errorResponse,
+          "404": errorResponse,
+        },
+      },
+    },
+    "/admin/exchange/{id}/start": {
+      post: {
+        tags: ["Sorteo"],
+        security: adminSecurity,
+        summary:
+          "Confirmar publicación y bloquear participantes (solo superusuario)",
+        description:
+          "Confirma la revisión y compara la huella actual. Requiere Gmail configurado y todos los datos válidos; 409 si el borrador está obsoleto. Publica los resultados privados en perfiles y bloquea sorteo/participantes antes del primer envío. Idempotente para la misma revisión ya publicada. Este endpoint no envía correo por sí solo.",
+        parameters: [idParam],
+        requestBody: revisionBody,
+        responses: {
+          "200": okJson("Sorteo bloqueado"),
+          "403": errorResponse,
+          "409": errorResponse,
+          "422": errorResponse,
+        },
+      },
+    },
+    "/admin/exchange/{id}/send-next": {
+      post: {
+        tags: ["Sorteo"],
+        security: adminSecurity,
+        summary: "Enviar el siguiente correo pendiente (solo superusuario)",
+        description:
+          "Solo sorteos publicados. Reclama atómicamente un pendiente y espera SMTP dentro de la petición. La interfaz repite esta orden tras Enviar todos o Continuar; no hay tareas automáticas ni trabajo después de responder. Estados pending/sending/sent/failed/uncertain. Interrupciones de más de 3 minutos pasan a uncertain y requieren revisión manual; no se reenvían al continuar. Sent significa aceptado por Gmail, no entrega en bandeja. Sin pendientes no hace nada; devuelve sorteo actualizado.",
+        parameters: [idParam],
+        responses: {
+          "200": okJson("Estado del lote"),
+          "403": errorResponse,
+          "409": errorResponse,
+        },
+      },
+    },
+    "/admin/exchange/{id}/mail/{assignmentId}": {
+      post: {
+        tags: ["Sorteo"],
+        security: adminSecurity,
+        summary: "Resolver un correo fallido o incierto (solo superusuario)",
+        description:
+          "Cuerpo estricto {action: retry|mark-sent}. Retry devuelve failed/uncertain a pending, conserva la asignación y no envía por sí solo. Para uncertain comprobar previamente Enviados en Gmail; mark-sent solo admite uncertain y registra la comprobación manual. No repite correos sent ni altera el sorteo.",
+        parameters: [
+          idParam,
+          {
+            name: "assignmentId",
+            in: "path",
+            required: true,
+            schema: { type: "string", format: "uuid" },
+          },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                additionalProperties: false,
+                required: ["action"],
+                properties: {
+                  action: { type: "string", enum: ["retry", "mark-sent"] },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          "200": okJson("Sorteo actualizado"),
+          "403": errorResponse,
+          "409": errorResponse,
+          "422": errorResponse,
+        },
+      },
+    },
     "/profile/{guestId}": {
       get: {
         tags: ["Perfil"],
         security: adminSecurity,
         summary: "Perfil propio e invitaciones del invitado autenticado",
         description:
-          "Solo role guest con guest_id igual al UUID de la ruta. Entrega guest (id, full_name, email, avatar, family_id, is_child), families existentes (id/name), events propios con fecha/hora/sede/anfitriones, asistencia e intercambio y status_options. Sin otros invitados, notas privadas, tokens ni datos organizativos. Cache-Control: no-store.",
+          "Solo role guest con guest_id igual al UUID de la ruta. Entrega guest (id, full_name, email, avatar, family_id, is_child), families existentes (id/name), events propios con fecha/hora/sede/anfitriones, asistencia e intercambio y status_options. Incluye exchange_results solo publicados del propio invitado (event_id/name, recipient_name, gift_suggestions, gift_html seguro, published_at) y events[].exchange_locked. Sin resultados ajenos, correos de destinatarios, notas privadas ni tokens. Cache-Control: no-store.",
         parameters: [
           {
             name: "guestId",
@@ -178,7 +311,7 @@ export const openApiDocument = {
         security: adminSecurity,
         summary: "Actualiza asistencia e intercambio de una invitación propia",
         description:
-          "No permite incorporarse a eventos no invitados (404). Solo adultos confirmados en Navidad con intercambio habilitado pueden participar; regalos obligatorios al participar. Pendiente/declinar desactiva participación conservando regalos. No modifica otros eventos. Responde perfil actualizado, no-store.",
+          "No permite incorporarse a eventos no invitados (404). Solo adultos confirmados en Navidad con intercambio habilitado pueden participar; regalos obligatorios al participar. Pendiente/declinar desactiva participación conservando regalos. Tras publicar el sorteo no permite cambiar asistencia ni participación de sus miembros (409 exchange_locked); datos personales y sugerencias siguen editables, sin alterar el resultado guardado. No modifica otros eventos. Responde perfil actualizado, no-store.",
         parameters: [
           {
             name: "guestId",
@@ -726,7 +859,9 @@ export const openApiDocument = {
         security: adminSecurity,
         summary: "Opciones y etiquetas para los formularios administrativos",
         responses: {
-          "200": okJson("Categorías, prioridades, estados RSVP y guest_genders (Hombre/Mujer)"),
+          "200": okJson(
+            "Categorías, prioridades, estados RSVP y guest_genders (Hombre/Mujer)",
+          ),
           "401": errorResponse,
         },
       },
@@ -761,7 +896,7 @@ export const openApiDocument = {
         security: adminSecurity,
         summary: "Editar celebración",
         description:
-          "Anfitrión: solo eventos asignados, sin editar slug/is_released; crear, borrar y liberar corresponde al superusuario. Actualización parcial; is_released controla cards, menú y registro sin borrar asistencias. No liberados vigentes se mencionan en home.upcoming_events; sus páginas y calendarios públicos responden 404 y no aceptan inscripciones. gift_exchange_enabled activa o desactiva el intercambio sin borrar participaciones ni sugerencias. El sorteo no está implementado.",
+          "Anfitrión: solo eventos asignados, sin editar slug/is_released; crear, borrar y liberar corresponde al superusuario. Actualización parcial; is_released controla cards, menú y registro sin borrar asistencias. No liberados vigentes se mencionan en home.upcoming_events; sus páginas y calendarios públicos responden 404 y no aceptan inscripciones. gift_exchange_enabled activa o desactiva el intercambio sin borrar participaciones ni sugerencias. Un sorteo publicado bloquea desactivar el intercambio, eliminar el evento o alterar sus participantes (409 exchange_locked).",
         parameters: [idParam],
         requestBody: {
           required: true,
